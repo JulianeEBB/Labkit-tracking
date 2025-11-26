@@ -1004,13 +1004,13 @@ TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1021,7 +1021,7 @@ TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Dashboard</h1>
+      <h1 class="page-title"><span class="icon">📊</span>Dashboard</h1>
       <p class="subtitle">Quick overview of your lab kits, sites, and expiry watch.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
@@ -1032,7 +1032,7 @@ TEMPLATE = """
         <div class="card-header">
           <div>
             <p class="eyebrow">Expiry watch</p>
-            <h2>Upcoming Expiry</h2>
+            <h2><span class="icon">⏳</span>Upcoming Expiry</h2>
           </div>
           <a class="btn btn-secondary" href="{{ url_for('expiry_page') }}">View details</a>
         </div>
@@ -1041,27 +1041,10 @@ TEMPLATE = """
       </div>
 
       <div class="card">
-        <h2>Update Labkit Status</h2>
-        <form method="post" action="{{ url_for('handle_update_status') }}" class="stacked">
-          <div class="form-row">
-            <div class="form-field">
-              <label>Barcode</label>
-              <input class="form-control" type="text" name="barcode" required>
-            </div>
-            <div class="form-field">
-              <label>New Status</label>
-              <input class="form-control" type="text" name="new_status" required>
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary">Update Status</button>
-        </form>
-      </div>
-
-      <div class="card">
         <div class="card-header">
           <div>
             <p class="eyebrow">Inventory</p>
-            <h2>Site Snapshot</h2>
+            <h2><span class="icon">📊</span>Site Snapshot</h2>
           </div>
         </div>
         <div class="table-wrapper">
@@ -1085,11 +1068,11 @@ TEMPLATE = """
         <div class="card-header">
           <div>
             <p class="eyebrow">Audit trail</p>
-            <h2>Export Audit Log</h2>
+            <h2><span class="icon">📜</span>Export Audit Log</h2>
           </div>
         </div>
         <p class="muted">Download the full audit trail as CSV.</p>
-        <a class="btn btn-secondary" href="{{ url_for('export_audit') }}">Download audit CSV</a>
+        <a class="btn btn-secondary" href="{{ url_for('export_audit') }}"><span class="icon">📜</span>Download audit CSV</a>
       </div>
     </div>
 
@@ -1097,7 +1080,7 @@ TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Sites</p>
-          <h2>All Sites</h2>
+          <h2><span class="icon">🏥</span>All Sites</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1120,7 +1103,7 @@ TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Kit Types</p>
-          <h2>Labkit Types</h2>
+          <h2><span class="icon">🧪</span>Labkit Types</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1143,7 +1126,7 @@ TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Inventory</p>
-          <h2>Labkits</h2>
+          <h2><span class="icon">📦</span>Labkits</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1171,7 +1154,7 @@ TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">History</p>
-          <h2>Status History</h2>
+          <h2><span class="icon">📜</span>Status History</h2>
         </div>
       </div>
       <form method="post" action="{{ url_for('handle_history') }}" class="stacked">
@@ -1181,7 +1164,7 @@ TEMPLATE = """
             <input class="form-control" type="text" name="history_barcode" value="{{ history_barcode }}">
           </div>
           <div class="form-field align-end">
-            <button type="submit" class="btn btn-secondary">Show History</button>
+            <button type="submit" class="btn btn-secondary"><span class="icon">🔍</span>Show History</button>
           </div>
         </div>
       </form>
@@ -1219,13 +1202,13 @@ KIT_TYPES_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1236,14 +1219,14 @@ KIT_TYPES_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Kit Types</h1>
+      <h1 class="page-title"><span class="icon">🧪</span>Kit Types</h1>
       <p class="subtitle">Define reusable kit types and their default expiry windows.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Create Kit Type</h2>
+      <h2><span class="icon">➕</span>Create Kit Type</h2>
       <form method="post" action="{{ url_for('handle_add_kit_type') }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1259,7 +1242,7 @@ KIT_TYPES_TEMPLATE = """
             <input class="form-control" type="number" name="default_expiry_days" min="0">
           </div>
         </div>
-        <button type="submit" class="btn btn-primary">Save Kit Type</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Kit Type</button>
       </form>
     </div>
 
@@ -1267,7 +1250,7 @@ KIT_TYPES_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Existing</p>
-          <h2>Existing Kit Types</h2>
+          <h2><span class="icon">🧪</span>Existing Kit Types</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1289,11 +1272,11 @@ KIT_TYPES_TEMPLATE = """
                 <input class="form-control" type="text" name="name" value="{{ t.name }}" required>
                 <input class="form-control" type="text" name="description" value="{{ t.description or '' }}">
                 <input class="form-control" type="number" name="default_expiry_days" value="{{ t.default_expiry_days or '' }}" min="0">
-                <button type="submit" class="btn btn-secondary">Update</button>
+                <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
               <form method="post" action="{{ url_for('handle_delete_kit_type') }}" onsubmit="return confirm('Delete this kit type?');" class="inline-form">
                 <input type="hidden" name="id" value="{{ t.id }}">
-                <button type="submit" class="btn btn-danger">Delete</button>
+                <button type="submit" class="btn btn-danger"><span class="icon">🗑️</span>Delete</button>
               </form>
             </td>
           </tr>
@@ -1320,13 +1303,13 @@ LABKITS_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1337,14 +1320,14 @@ LABKITS_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Labkits</h1>
+      <h1 class="page-title"><span class="icon">📦</span>Labkits</h1>
       <p class="subtitle">Create, update, and track every labkit across your network.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Create Labkit</h2>
+      <h2><span class="icon">➕</span>Create Labkit</h2>
       <form method="post" action="{{ url_for('handle_add_labkit') }}" id="create-labkit-form" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1390,7 +1373,7 @@ LABKITS_TEMPLATE = """
             </select>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary">Save Labkit</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Labkit</button>
       </form>
     </div>
 
@@ -1398,9 +1381,9 @@ LABKITS_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Inventory</p>
-          <h2>Existing Labkits</h2>
+          <h2><span class="icon">📦</span>Existing Labkits</h2>
         </div>
-        <a class="btn btn-secondary" href="{{ url_for('export_labkits') }}">Export CSV</a>
+        <a class="btn btn-secondary" href="{{ url_for('export_labkits') }}"><span class="icon">📤</span>Export CSV</a>
       </div>
       <div class="table-wrapper">
         <table>
@@ -1441,14 +1424,14 @@ LABKITS_TEMPLATE = """
                   <option value="{{ st }}" {% if st == k.status %}selected{% endif %}>{{ st }}</option>
                   {% endfor %}
                 </select>
-                <button type="submit" class="btn btn-secondary">Update</button>
+                <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
               <form method="post" action="{{ url_for('handle_delete_labkit') }}" onsubmit="return confirm('Delete this labkit?');" class="inline-form">
                 <input type="hidden" name="id" value="{{ k.id }}">
-                <button type="submit" class="btn btn-danger">Delete</button>
+                <button type="submit" class="btn btn-danger"><span class="icon">🗑️</span>Delete</button>
               </form>
-              <a class="btn btn-link" href="{{ url_for('labkit_detail_page', labkit_id=k.id) }}">Details</a>
-              <a class="btn btn-link" href="{{ url_for('labkit_label', labkit_id=k.id) }}" target="_blank">Print label</a>
+              <a class="btn btn-link" href="{{ url_for('labkit_detail_page', labkit_id=k.id) }}"><span class="icon">📄</span>Details</a>
+              <a class="btn btn-link" href="{{ url_for('labkit_label', labkit_id=k.id) }}" target="_blank"><span class="icon">🖨️</span>Print label</a>
             </td>
           </tr>
           {% endfor %}
@@ -1493,13 +1476,13 @@ SITES_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1510,14 +1493,14 @@ SITES_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Sites</h1>
+      <h1 class="page-title"><span class="icon">🏥</span>Sites</h1>
       <p class="subtitle">Manage research locations and keep contact info current.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Create Site</h2>
+      <h2><span class="icon">➕</span>Create Site</h2>
       <form method="post" action="{{ url_for('handle_add_site_page') }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1557,7 +1540,7 @@ SITES_TEMPLATE = """
             <input class="form-control" type="text" name="country">
           </div>
         </div>
-        <button type="submit" class="btn btn-primary">Save Site</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Site</button>
       </form>
     </div>
 
@@ -1565,7 +1548,7 @@ SITES_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Directory</p>
-          <h2>Existing Sites</h2>
+          <h2><span class="icon">🏥</span>Existing Sites</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1586,13 +1569,13 @@ SITES_TEMPLATE = """
                 <input class="form-control" type="text" name="site_name" value="{{ s.site_name }}" required>
                 <input class="form-control" type="text" name="city" value="{{ s.city or '' }}" placeholder="City">
                 <input class="form-control" type="text" name="country" value="{{ s.country or '' }}" placeholder="Country">
-                <button type="submit" class="btn btn-secondary">Update</button>
+                <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
               <form method="post" action="{{ url_for('handle_delete_site') }}" onsubmit="return confirm('Delete this site?');" class="inline-form">
                 <input type="hidden" name="id" value="{{ s.id }}">
-                <button type="submit" class="btn btn-danger">Delete</button>
+                <button type="submit" class="btn btn-danger"><span class="icon">🗑️</span>Delete</button>
               </form>
-              <a class="btn btn-link" href="{{ url_for('site_detail', site_id=s.id) }}">Details</a>
+              <a class="btn btn-link" href="{{ url_for('site_detail', site_id=s.id) }}"><span class="icon">📄</span>Details</a>
             </td>
           </tr>
           {% endfor %}
@@ -1619,13 +1602,13 @@ SITE_DETAIL_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1636,14 +1619,14 @@ SITE_DETAIL_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Site: {{ site.site_name }} ({{ site.site_code }})</h1>
+      <h1 class="page-title"><span class="icon">🏥</span>Site: {{ site.site_name }} ({{ site.site_code }})</h1>
       <p class="subtitle">Location details and on-site contacts.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Address</h2>
+      <h2><span class="icon">📍</span>Address</h2>
       <p class="muted">
         {{ site.address_line1 or '' }} {{ site.address_line2 or '' }}<br>
         {{ site.city or '' }} {{ site.state or '' }} {{ site.postal_code or '' }}<br>
@@ -1652,7 +1635,7 @@ SITE_DETAIL_TEMPLATE = """
     </div>
 
     <div class="card">
-      <h2>Add Contact</h2>
+      <h2><span class="icon">➕</span>Add Contact</h2>
       <form method="post" action="{{ url_for('handle_add_contact', site_id=site.id) }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1677,7 +1660,7 @@ SITE_DETAIL_TEMPLATE = """
         <label class="checkbox">
           <input type="checkbox" name="is_primary" value="1"> Primary contact
         </label>
-        <button type="submit" class="btn btn-primary">Add Contact</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Add Contact</button>
       </form>
     </div>
 
@@ -1685,7 +1668,7 @@ SITE_DETAIL_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">People</p>
-          <h2>Contacts</h2>
+          <h2><span class="icon">👥</span>Contacts</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -1707,11 +1690,11 @@ SITE_DETAIL_TEMPLATE = """
                 <input class="form-control" type="email" name="email" value="{{ c.email or '' }}">
                 <input class="form-control" type="tel" name="phone" value="{{ c.phone or '' }}">
                 <label class="checkbox inline"><input type="checkbox" name="is_primary" value="1" {% if c.is_primary %}checked{% endif %}> Primary</label>
-                <button type="submit" class="btn btn-secondary">Update</button>
+                <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
               <form method="post" action="{{ url_for('handle_delete_contact', site_id=site.id) }}" onsubmit="return confirm('Delete this contact?');" class="inline-form">
                 <input type="hidden" name="id" value="{{ c.id }}">
-                <button type="submit" class="btn btn-danger">Delete</button>
+                <button type="submit" class="btn btn-danger"><span class="icon">🗑️</span>Delete</button>
               </form>
             </td>
           </tr>
@@ -1741,13 +1724,13 @@ SHIPMENTS_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1758,14 +1741,14 @@ SHIPMENTS_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Shipments</h1>
+      <h1 class="page-title"><span class="icon">🚚</span>Shipments</h1>
       <p class="subtitle">Track shipments and assign labkits to each delivery.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Create Shipment</h2>
+      <h2><span class="icon">➕</span>Create Shipment</h2>
       <form method="post" action="{{ url_for('handle_add_shipment') }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1814,7 +1797,7 @@ SHIPMENTS_TEMPLATE = """
           </select>
           <p class="muted small-text">Hold Cmd/Ctrl to select multiple kits.</p>
         </div>
-        <button type="submit" class="btn btn-primary">Create Shipment</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Create Shipment</button>
       </form>
     </div>
 
@@ -1822,9 +1805,9 @@ SHIPMENTS_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Log</p>
-          <h2>Existing Shipments</h2>
+          <h2><span class="icon">🚚</span>Existing Shipments</h2>
         </div>
-        <a class="btn btn-secondary" href="{{ url_for('export_shipments') }}">Export CSV</a>
+        <a class="btn btn-secondary" href="{{ url_for('export_shipments') }}"><span class="icon">📤</span>Export CSV</a>
       </div>
       <div class="table-wrapper">
         <table>
@@ -1839,7 +1822,7 @@ SHIPMENTS_TEMPLATE = """
             <td>{{ sh.carrier }}</td>
             <td>{{ sh.tracking_number }}</td>
             <td><span class="badge status-{{ sh.status|replace(' ', '_') }}">{{ sh.status }}</span></td>
-            <td><a class="btn btn-link" href="{{ url_for('shipment_detail', shipment_id=sh.id) }}">Details</a></td>
+            <td><a class="btn btn-link" href="{{ url_for('shipment_detail', shipment_id=sh.id) }}"><span class="icon">📄</span>Details</a></td>
           </tr>
           {% endfor %}
           </tbody>
@@ -1865,13 +1848,13 @@ SHIPMENT_DETAIL_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -1882,14 +1865,14 @@ SHIPMENT_DETAIL_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Shipment {{ shipment.id }}</h1>
+      <h1 class="page-title"><span class="icon">🚚</span>Shipment {{ shipment.id }}</h1>
       <p class="subtitle">Update shipment metadata and assigned labkits.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Edit Shipment</h2>
+      <h2><span class="icon">✏️</span>Edit Shipment</h2>
       <form method="post" action="{{ url_for('handle_update_shipment', shipment_id=shipment.id) }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -1938,7 +1921,7 @@ SHIPMENT_DETAIL_TEMPLATE = """
           </select>
           <p class="muted small-text">Hold Cmd/Ctrl to multi-select.</p>
         </div>
-        <button type="submit" class="btn btn-primary">Update Shipment</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">✏️</span>Update Shipment</button>
       </form>
     </div>
 
@@ -1946,7 +1929,7 @@ SHIPMENT_DETAIL_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Contents</p>
-          <h2>Assigned Labkits</h2>
+          <h2><span class="icon">📦</span>Assigned Labkits</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2016,13 +1999,13 @@ LABKIT_DETAIL_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -2033,14 +2016,14 @@ LABKIT_DETAIL_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Labkit {{ labkit.kit_barcode }}</h1>
+      <h1 class="page-title"><span class="icon">📦</span>Labkit {{ labkit.kit_barcode }}</h1>
       <p class="subtitle">Full history and metadata for this kit.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
     {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 
     <div class="card">
-      <h2>Summary</h2>
+      <h2><span class="icon">🧾</span>Summary</h2>
       <div class="meta-grid">
         <div><p class="eyebrow">Type</p><p>{{ labkit.labkit_type_name }}</p></div>
         <div><p class="eyebrow">Site</p><p>{{ labkit.site_name or 'Central depot' }}</p></div>
@@ -2056,7 +2039,7 @@ LABKIT_DETAIL_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Timeline</p>
-          <h2>History</h2>
+          <h2><span class="icon">🕑</span>History</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2080,7 +2063,7 @@ LABKIT_DETAIL_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Audit trail</p>
-          <h2>Audit Log</h2>
+          <h2><span class="icon">📜</span>Audit Log</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2104,10 +2087,10 @@ LABKIT_DETAIL_TEMPLATE = """
     </div>
 
     <div class="card">
-      <h2>Add Note</h2>
+      <h2><span class="icon">📝</span><span class="icon">📝</span>Add Note</h2>
       <form method="post" action="{{ url_for('handle_add_labkit_note', labkit_id=labkit.id) }}" class="stacked">
         <textarea class="form-control" name="description" required></textarea>
-        <button type="submit" class="btn btn-primary">Add Note</button>
+        <button type="submit" class="btn btn-primary"><span class="icon">📝</span><span class="icon">📝</span>Add Note</button>
       </form>
     </div>
 
@@ -2129,13 +2112,13 @@ INVENTORY_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -2146,12 +2129,12 @@ INVENTORY_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Inventory</h1>
+      <h1 class="page-title"><span class="icon">📋</span>Inventory</h1>
       <p class="subtitle">See available counts by site and kit type.</p>
     </div>
 
     <div class="card">
-      <h2>Filter</h2>
+      <h2><span class="icon">🔍</span>Filter</h2>
       <form method="get" action="{{ url_for('inventory_page') }}" class="stacked">
         <div class="form-row">
           <div class="form-field">
@@ -2182,7 +2165,7 @@ INVENTORY_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Current levels</p>
-          <h2>Availability</h2>
+          <h2><span class="icon">📋</span>Availability</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2217,13 +2200,13 @@ EXPIRY_TEMPLATE = """
     <div class="nav-inner">
       <div class="brand">Lab Kit Tracking</div>
       <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}">Home</a>
-        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}">Labkits</a>
-        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}">Kit Types</a>
-        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}">Sites</a>
-        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}">Shipments</a>
-        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}">Inventory</a>
-        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}">Expiry</a>
+        <a href="{{ url_for('index') }}" class="nav-link {{ 'active' if nav_active == 'home' else '' }}"><span class="icon">📊</span>Home</a>
+        <a href="{{ url_for('labkits_page') }}" class="nav-link {{ 'active' if nav_active == 'labkits' else '' }}"><span class="icon">📦</span>Labkits</a>
+        <a href="{{ url_for('kit_types') }}" class="nav-link {{ 'active' if nav_active == 'kit_types' else '' }}"><span class="icon">🧪</span>Kit Types</a>
+        <a href="{{ url_for('sites_page') }}" class="nav-link {{ 'active' if nav_active == 'sites' else '' }}"><span class="icon">🏥</span>Sites</a>
+        <a href="{{ url_for('shipments_page') }}" class="nav-link {{ 'active' if nav_active == 'shipments' else '' }}"><span class="icon">🚚</span>Shipments</a>
+        <a href="{{ url_for('inventory_page') }}" class="nav-link {{ 'active' if nav_active == 'inventory' else '' }}"><span class="icon">📋</span>Inventory</a>
+        <a href="{{ url_for('expiry_page') }}" class="nav-link {{ 'active' if nav_active == 'expiry' else '' }}"><span class="icon">⏳</span>Expiry</a>
       </nav>
       <div class="user-chip">
         <span class="pill muted">Logged in as {{ current_user }}</span>
@@ -2234,7 +2217,7 @@ EXPIRY_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title">Expiry Overview</h1>
+      <h1 class="page-title"><span class="icon">⏳</span>Expiry Overview</h1>
       <p class="subtitle">Spot expired and soon-to-expire kits at a glance.</p>
     </div>
 
@@ -2242,7 +2225,7 @@ EXPIRY_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Priority</p>
-          <h2>Expired Kits</h2>
+          <h2><span class="icon">⚠️</span>Expired Kits</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2267,7 +2250,7 @@ EXPIRY_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Upcoming</p>
-          <h2>Expiring within {{ warning_days }} days</h2>
+          <h2><span class="icon">⏳</span>Expiring within {{ warning_days }} days</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2292,7 +2275,7 @@ EXPIRY_TEMPLATE = """
       <div class="card-header">
         <div>
           <p class="eyebrow">Healthy stock</p>
-          <h2>Other Kits</h2>
+          <h2><span class="icon">✅</span>Other Kits</h2>
         </div>
       </div>
       <div class="table-wrapper">
@@ -2334,7 +2317,7 @@ LOGIN_TEMPLATE = """
       <input class="form-control" type="text" name="username" required>
       <label>Password</label>
       <input class="form-control" type="password" name="password" required>
-      <button type="submit" class="btn btn-primary full-width">Login</button>
+      <button type="submit" class="btn btn-primary full-width"><span class="icon">🔐</span>Login</button>
     </form>
   </div>
 </body>
