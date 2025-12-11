@@ -1,7 +1,9 @@
 """Repository functions for lab kit tracking."""
 
+import re
 from typing import Any, Dict, List, Optional
 
+import psycopg2
 from werkzeug.security import generate_password_hash
 
 from db_config import get_connection
@@ -11,6 +13,89 @@ def _rows_to_dicts(cursor) -> List[Dict[str, Any]]:
     """Convert cursor rows to list of dicts using column names."""
     columns = [desc[0] for desc in cursor.description]
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def _derive_prefix(name: str) -> str:
+    """Return a short uppercase prefix derived from a labkit type name."""
+    if not name:
+        return "KIT"
+    tokens = [t for t in re.split(r"[^A-Za-z0-9]+", name) if t]
+    candidate = "".join(t[0] for t in tokens) or name[:4]
+    return candidate.upper()[:6]  # keep compact for labels
+
+
+def _ensure_labkit_type_prefix(cur, labkit_type_id: int) -> str:
+    """Fetch or create a prefix for the given labkit type, persisting it if missing."""
+    cur.execute("SELECT name, prefix FROM labkit_type WHERE id = %s;", (labkit_type_id,))
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"Labkit type {labkit_type_id} not found")
+    name, existing_prefix = row
+    if existing_prefix:
+        return existing_prefix
+    generated = _derive_prefix(name)
+    cur.execute("UPDATE labkit_type SET prefix = %s WHERE id = %s;", (generated, labkit_type_id))
+    return generated
+
+
+def _next_sequence_for_type(cur, labkit_type_id: int, prefix: str) -> int:
+    """Return the next numeric suffix for a labkit type based on existing barcodes."""
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(CAST(split_part(barcode_value, '-', 2) AS INTEGER)), 0)
+        FROM labkit
+        WHERE labkit_type_id = %s
+          AND barcode_value LIKE %s;
+        """,
+        (labkit_type_id, f"{prefix}-%"),
+    )
+    current_max = cur.fetchone()[0] or 0
+    return int(current_max) + 1
+
+
+def backfill_missing_barcodes() -> None:
+    """Assign barcode_value to any existing labkits that do not have one."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, name, prefix FROM labkit_type ORDER BY id;")
+        kit_types = cur.fetchall()
+        for labkit_type_id, name, prefix in kit_types:
+            prefix_value = prefix or _derive_prefix(name)
+            dirty = False
+            if prefix != prefix_value:
+                cur.execute(
+                    "UPDATE labkit_type SET prefix = %s WHERE id = %s;",
+                    (prefix_value, labkit_type_id),
+                )
+                dirty = True
+            # Lock rows we will update to keep numbering stable
+            cur.execute(
+                """
+                SELECT id
+                FROM labkit
+                WHERE labkit_type_id = %s AND barcode_value IS NULL
+                ORDER BY id
+                FOR UPDATE;
+                """,
+                (labkit_type_id,),
+            )
+            missing = [row[0] for row in cur.fetchall()]
+            if missing:
+                next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix_value)
+                for labkit_id in missing:
+                    candidate = f"{prefix_value}-{next_seq:04d}"
+                    next_seq += 1
+                    cur.execute(
+                        "UPDATE labkit SET barcode_value = %s WHERE id = %s;",
+                        (candidate, labkit_id),
+                    )
+                dirty = True
+            if dirty:
+                conn.commit()
+    finally:
+        cur.close()
+        conn.close()
 
 
 def add_site(site_code: str, site_name: str) -> int:
@@ -39,6 +124,7 @@ def list_labkits_with_names() -> List[Dict[str, Any]]:
             """
             SELECT
                 l.kit_barcode,
+                l.barcode_value,
                 t.name AS labkit_type_name,
                 s.site_name,
                 l.status,
@@ -202,19 +288,23 @@ def delete_site(site_id: int) -> None:
 
 
 def add_labkit_type(
-    name: str, description: Optional[str] = None, default_expiry_days: Optional[int] = None
+    name: str,
+    description: Optional[str] = None,
+    default_expiry_days: Optional[int] = None,
+    prefix: Optional[str] = None,
 ) -> int:
     """Insert a new labkit type and return its id."""
     conn = get_connection()
     cur = conn.cursor()
     try:
+        prefix_value = (prefix or _derive_prefix(name)).upper()
         cur.execute(
             """
-            INSERT INTO labkit_type (name, description, default_expiry_days)
-            VALUES (%s, %s, %s)
+            INSERT INTO labkit_type (name, prefix, description, default_expiry_days)
+            VALUES (%s, %s, %s, %s)
             RETURNING id;
             """,
-            (name, description, default_expiry_days),
+            (name, prefix_value, description, default_expiry_days),
         )
         new_id = cur.fetchone()[0]
         conn.commit()
@@ -231,7 +321,7 @@ def list_labkit_types() -> List[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT id, name, description, default_expiry_days, created_at
+            SELECT id, name, prefix, description, default_expiry_days, created_at
             FROM labkit_type
             ORDER BY id;
             """
@@ -247,20 +337,23 @@ def update_labkit_type(
     name: str,
     description: Optional[str],
     default_expiry_days: Optional[int],
+    prefix: Optional[str] = None,
 ) -> None:
     """Update a labkit type."""
     conn = get_connection()
     cur = conn.cursor()
     try:
+        prefix_value = prefix.upper() if prefix else None
         cur.execute(
             """
             UPDATE labkit_type
             SET name = %s,
                 description = %s,
-                default_expiry_days = %s
+                default_expiry_days = %s,
+                prefix = COALESCE(%s, prefix)
             WHERE id = %s;
             """,
-            (name, description, default_expiry_days, labkit_type_id),
+            (name, description, default_expiry_days, prefix_value, labkit_type_id),
         )
         conn.commit()
     finally:
@@ -291,31 +384,45 @@ def delete_labkit_type(labkit_type_id: int) -> None:
 
 
 def add_labkit(
-    kit_barcode: str,
     labkit_type_id: int,
     site_id: Optional[int],
     lot_number: Optional[str],
     expiry_date,
+    kit_barcode: Optional[str] = None,
     created_by: Optional[str] = None,
 ) -> int:
-    """Insert a new labkit and return its id."""
+    """Insert a new labkit with an auto-generated barcode and return its id."""
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute(
-            """
-            INSERT INTO labkit (
-                kit_barcode, labkit_type_id, site_id, lot_number, expiry_date, status
-            )
-            VALUES (%s, %s, %s, %s, %s, 'planned')
-            RETURNING id;
-            """,
-            (kit_barcode, labkit_type_id, site_id, lot_number, expiry_date),
-        )
-        new_id = cur.fetchone()[0]
-        conn.commit()
-        add_labkit_event(new_id, "created", "Labkit created", created_by=created_by or "system")
-        return new_id
+        attempts = 0
+        while attempts < 5:
+            cur.execute("BEGIN;")
+            prefix = _ensure_labkit_type_prefix(cur, labkit_type_id)
+            next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix)
+            barcode_value = f"{prefix}-{next_seq:04d}"
+            candidate_barcode = kit_barcode or barcode_value
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO labkit (
+                        kit_barcode, barcode_value, labkit_type_id, site_id, lot_number, expiry_date, status
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, 'planned')
+                    RETURNING id;
+                    """,
+                    (candidate_barcode, barcode_value, labkit_type_id, site_id, lot_number, expiry_date),
+                )
+                new_id = cur.fetchone()[0]
+                conn.commit()
+                add_labkit_event(new_id, "created", "Labkit created", created_by=created_by or "system")
+                return new_id
+            except psycopg2.IntegrityError:
+                conn.rollback()
+                attempts += 1
+                # Another concurrent insert likely took the number; retry with the next sequence
+                continue
+        raise RuntimeError("Could not allocate a unique barcode after multiple attempts")
     finally:
         cur.close()
         conn.close()
@@ -328,12 +435,12 @@ def get_labkit_by_barcode(barcode: str) -> Optional[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT id, kit_barcode, labkit_type_id, site_id, lot_number,
+            SELECT id, kit_barcode, barcode_value, labkit_type_id, site_id, lot_number,
                    expiry_date, status, created_at, updated_at
             FROM labkit
-            WHERE kit_barcode = %s;
+            WHERE kit_barcode = %s OR barcode_value = %s;
             """,
-            (barcode,),
+            (barcode, barcode),
         )
         row = cur.fetchone()
         if not row:
@@ -355,6 +462,7 @@ def list_labkits() -> List[Dict[str, Any]]:
             SELECT
                 l.id,
                 l.kit_barcode,
+                l.barcode_value,
                 l.labkit_type_id,
                 t.name AS labkit_type_name,
                 l.site_id,
@@ -386,8 +494,8 @@ def update_labkit_status(barcode: str, new_status: str, created_by: Optional[str
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT id, status FROM labkit WHERE kit_barcode = %s;",
-            (barcode,),
+            "SELECT id, status FROM labkit WHERE kit_barcode = %s OR barcode_value = %s;",
+            (barcode, barcode),
         )
         row = cur.fetchone()
         if not row:
@@ -434,7 +542,7 @@ def get_labkit_by_id(labkit_id: int) -> Optional[Dict[str, Any]]:
         cur.execute(
             """
             SELECT id, kit_barcode, labkit_type_id, site_id, lot_number,
-                   expiry_date, status, created_at, updated_at
+                   expiry_date, status, created_at, updated_at, barcode_value
             FROM labkit
             WHERE id = %s;
             """,
@@ -460,6 +568,7 @@ def get_labkit_detail(labkit_id: int) -> Optional[Dict[str, Any]]:
             SELECT
                 l.id,
                 l.kit_barcode,
+                l.barcode_value,
                 l.labkit_type_id,
                 t.name AS labkit_type_name,
                 l.site_id,
@@ -489,6 +598,7 @@ def get_labkit_detail(labkit_id: int) -> Optional[Dict[str, Any]]:
 def update_labkit(
     labkit_id: int,
     kit_barcode: str,
+    barcode_value: Optional[str],
     labkit_type_id: int,
     site_id: Optional[int],
     lot_number: Optional[str],
@@ -503,6 +613,7 @@ def update_labkit(
             """
             UPDATE labkit
             SET kit_barcode = %s,
+                barcode_value = COALESCE(%s, barcode_value),
                 labkit_type_id = %s,
                 site_id = %s,
                 lot_number = %s,
@@ -511,7 +622,16 @@ def update_labkit(
                 updated_at = NOW()
             WHERE id = %s;
             """,
-            (kit_barcode, labkit_type_id, site_id, lot_number, expiry_date, status, labkit_id),
+            (
+                kit_barcode,
+                barcode_value,
+                labkit_type_id,
+                site_id,
+                lot_number,
+                expiry_date,
+                status,
+                labkit_id,
+            ),
         )
         conn.commit()
     finally:
@@ -631,7 +751,10 @@ def get_status_history(barcode: str) -> List[Dict[str, Any]]:
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id FROM labkit WHERE kit_barcode = %s;", (barcode,))
+        cur.execute(
+            "SELECT id FROM labkit WHERE kit_barcode = %s OR barcode_value = %s;",
+            (barcode, barcode),
+        )
         row = cur.fetchone()
         if not row:
             return []
@@ -747,7 +870,7 @@ def list_unassigned_labkits() -> List[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT l.id, l.kit_barcode, t.name AS labkit_type_name, l.status
+            SELECT l.id, l.kit_barcode, l.barcode_value, t.name AS labkit_type_name, l.status
             FROM labkit l
             LEFT JOIN labkit_type t ON l.labkit_type_id = t.id
             WHERE l.shipment_id IS NULL
@@ -802,7 +925,7 @@ def get_shipment(shipment_id: int) -> Optional[Dict[str, Any]]:
 
         cur.execute(
             """
-            SELECT l.id, l.kit_barcode, t.name AS labkit_type_name, l.status
+            SELECT l.id, l.kit_barcode, l.barcode_value, t.name AS labkit_type_name, l.status
             FROM labkit l
             LEFT JOIN labkit_type t ON l.labkit_type_id = t.id
             WHERE l.shipment_id = %s

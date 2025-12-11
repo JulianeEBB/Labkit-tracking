@@ -71,6 +71,7 @@ class LabkitType(Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
+    prefix = Column(String)
     description = Column(String)
     default_expiry_days = Column(Integer)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -85,6 +86,7 @@ class Labkit(Base):
     kit_barcode = Column(String, unique=True, nullable=False)
     labkit_type_id = Column(Integer, ForeignKey("labkit_type.id"), nullable=False)
     site_id = Column(Integer, ForeignKey("site.id"), nullable=True)  # nullable for depot
+    barcode_value = Column(String, unique=True)
     lot_number = Column(String)
     expiry_date = Column(Date)
     status = Column(

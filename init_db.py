@@ -42,6 +42,7 @@ def initialize_database() -> None:
             CREATE TABLE IF NOT EXISTS labkit_type (
                 id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
+                prefix TEXT,
                 description TEXT,
                 default_expiry_days INTEGER,
                 created_at TIMESTAMP DEFAULT NOW()
@@ -52,6 +53,7 @@ def initialize_database() -> None:
         cur.execute(
             """
             ALTER TABLE labkit_type
+            ADD COLUMN IF NOT EXISTS prefix TEXT,
             ADD COLUMN IF NOT EXISTS default_expiry_days INTEGER;
             """
         )
@@ -82,8 +84,29 @@ def initialize_database() -> None:
                 expiry_date DATE,
                 status TEXT DEFAULT 'planned',
                 created_at TIMESTAMP DEFAULT NOW(),
+                barcode_value TEXT UNIQUE,
                 updated_at TIMESTAMP DEFAULT NOW()
             );
+            """
+        )
+        # Ensure new barcode column exists for older databases
+        cur.execute(
+            """
+            ALTER TABLE labkit
+            ADD COLUMN IF NOT EXISTS barcode_value TEXT;
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'labkit_barcode_value_key'
+                ) THEN
+                    ALTER TABLE labkit ADD CONSTRAINT labkit_barcode_value_key UNIQUE (barcode_value);
+                END IF;
+            END$$;
             """
         )
 

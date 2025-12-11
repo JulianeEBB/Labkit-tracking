@@ -8,7 +8,8 @@ from flask import Flask, redirect, render_template_string, request, session, url
 from flask import Response
 from werkzeug.security import check_password_hash
 import psycopg2
-import qrcode
+from barcode import Code39
+from barcode.writer import ImageWriter
 
 from init_db import initialize_database
 from models import AuditLog, SessionLocal
@@ -20,6 +21,7 @@ from labkit_repo import (
     add_site_contact,
     add_shipment,
     add_labkit_event,
+    backfill_missing_barcodes,
     delete_labkit,
     delete_labkit_type,
     delete_site,
@@ -54,6 +56,7 @@ from labkit_repo import (
 # Initialize tables on app startup (Flask 3+ removed before_first_request)
 initialize_database()
 ensure_default_users()
+backfill_missing_barcodes()
 
 app = Flask(__name__)
 app.secret_key = "change-me-later"
@@ -568,7 +571,11 @@ def handle_add_shipment():
         shipment = get_shipment(shipment_id) or {}
         for lk in shipment.get("labkits", []):
             try:
-                update_labkit_status(lk["kit_barcode"], "shipped", created_by=current_username())
+                update_labkit_status(
+                    lk.get("barcode_value") or lk.get("kit_barcode"),
+                    "shipped",
+                    created_by=current_username(),
+                )
             except ValueError:
                 continue
     else:
@@ -611,7 +618,11 @@ def handle_update_shipment(shipment_id: int):
         shipment = get_shipment(shipment_id) or {}
         for lk in shipment.get("labkits", []):
             try:
-                update_labkit_status(lk["kit_barcode"], "shipped", created_by=current_username())
+                update_labkit_status(
+                    lk.get("barcode_value") or lk.get("kit_barcode"),
+                    "shipped",
+                    created_by=current_username(),
+                )
             except ValueError:
                 continue
     else:
@@ -628,11 +639,13 @@ def handle_update_shipment(shipment_id: int):
     return redirect(url_for("shipment_detail", shipment_id=shipment_id, message="Shipment updated."))
 
 
-def _qr_data_uri(text: str) -> str:
-    """Generate a QR code as data URI for inline display."""
-    img = qrcode.make(text)
+def _barcode_data_uri(text: str) -> str:
+    """Generate a Code39 barcode as data URI for inline display."""
+    if not text:
+        return ""
+    barcode_obj = Code39(text, writer=ImageWriter(), add_checksum=False)
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    barcode_obj.write(buf, options={"write_text": False})
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
 
@@ -642,38 +655,69 @@ def labkit_label(labkit_id: int):
     labkit = get_labkit_detail(labkit_id)
     if not labkit:
         return redirect(url_for("labkits_page", error="Labkit not found"))
-    absolute_url = url_for("labkit_label", labkit_id=labkit_id, _external=True)
-    qr_payload = labkit.get("kit_barcode") or ""
-    if absolute_url:
-        qr_payload = f"{labkit.get('kit_barcode','')}|{absolute_url}"
-    qr_uri = _qr_data_uri(qr_payload)
+    barcode_value = labkit.get("barcode_value") or labkit.get("kit_barcode") or ""
+    barcode_uri = _barcode_data_uri(barcode_value)
     return render_template_string(
         LABKIT_LABEL_TEMPLATE,
         nav_active="labkits",
         labkit=labkit,
-        qr_uri=qr_uri,
+        barcode_uri=barcode_uri,
+        barcode_value=barcode_value,
+    )
+
+
+@app.route("/labkits/<int:labkit_id>/label.csv")
+def labkit_label_csv(labkit_id: int):
+    """Download a minimal CSV with barcode and kit type (no header)."""
+    labkit = get_labkit_detail(labkit_id)
+    if not labkit:
+        return redirect(url_for("labkits_page", error="Labkit not found"))
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([labkit.get("barcode_value") or labkit.get("kit_barcode") or "", labkit.get("labkit_type_name") or ""])
+    csv_data = output.getvalue()
+    return Response(
+        csv_data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=labkit-{labkit_id}-label.csv"},
+    )
+
+
+@app.route("/labkits/barcodes.csv")
+def labkits_barcodes_csv():
+    """Download all labkit barcodes and types (two columns, no header)."""
+    rows = list_labkits()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    for r in rows:
+        writer.writerow([r.get("barcode_value") or r.get("kit_barcode") or "", r.get("labkit_type_name") or ""])
+    csv_data = output.getvalue()
+    return Response(
+        csv_data,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=labkit-barcodes.csv"},
     )
 
 
 @app.route("/labkits/add", methods=["POST"])
 def handle_add_labkit():
-    barcode = request.form.get("kit_barcode", "").strip()
-    labkit_type_id = request.form.get("labkit_type_id", "").strip()
+    labkit_type_id_raw = request.form.get("labkit_type_id", "").strip()
     site_id = request.form.get("site_id", "").strip()
     lot_number = request.form.get("lot_number", "").strip() or None
     expiry_date_str = request.form.get("expiry_date", "").strip()
     status = request.form.get("status", "").strip() or "planned"
     expiry = parse_date(expiry_date_str)
-    if not barcode or not labkit_type_id:
-        return redirect(url_for("labkits_page", error="Barcode and labkit type are required"))
+    if not labkit_type_id_raw:
+        return redirect(url_for("labkits_page", error="Labkit type is required"))
     new_id = add_labkit(
-        kit_barcode=barcode,
-        labkit_type_id=int(labkit_type_id),
+        labkit_type_id=int(labkit_type_id_raw),
         site_id=int(site_id) if site_id else None,
         lot_number=lot_number,
         expiry_date=expiry,
         created_by=current_username(),
     )
+    created = get_labkit_by_id(new_id) or {}
+    display_code = created.get("barcode_value") or created.get("kit_barcode")
     db_session = SessionLocal()
     try:
         log_audit_event(
@@ -681,15 +725,15 @@ def handle_add_labkit():
             entity_type="Labkit",
             entity_id=new_id,
             action="CREATE",
-            description=f"Labkit {barcode} created",
+            description=f"Labkit {display_code} created",
         )
         db_session.commit()
     finally:
         db_session.close()
     # Update status if different than default
     if status and status != "planned":
-        update_labkit_status(barcode, status, created_by=current_username())
-    return redirect(url_for("labkits_page", message=f"Labkit '{barcode}' added."))
+        update_labkit_status(display_code or "", status, created_by=current_username())
+    return redirect(url_for("labkits_page", message=f"Labkit '{display_code}' added."))
 
 
 @app.route("/labkits/update", methods=["POST"])
@@ -702,18 +746,20 @@ def handle_update_labkit():
     if not existing:
         return redirect(url_for("labkits_page", error="Labkit not found"))
 
-    barcode = request.form.get("kit_barcode", "").strip()
+    barcode = request.form.get("kit_barcode", "").strip() or existing.get("kit_barcode", "")
+    barcode_value = request.form.get("barcode_value", "").strip() or existing.get("barcode_value")
     labkit_type_id = request.form.get("labkit_type_id", "").strip()
     site_id = request.form.get("site_id", "").strip()
     lot_number = request.form.get("lot_number", "").strip() or None
     expiry_date_str = request.form.get("expiry_date", "").strip()
     status = request.form.get("status", "").strip() or existing["status"]
     expiry = parse_date(expiry_date_str)
-    if not barcode or not labkit_type_id:
-        return redirect(url_for("labkits_page", error="Barcode and labkit type are required"))
+    if not labkit_type_id:
+        return redirect(url_for("labkits_page", error="Labkit type is required"))
     update_labkit(
         labkit_id=labkit_id,
         kit_barcode=barcode,
+        barcode_value=barcode_value,
         labkit_type_id=int(labkit_type_id),
         site_id=int(site_id) if site_id else None,
         lot_number=lot_number,
@@ -728,7 +774,7 @@ def handle_update_labkit():
             entity_type="Labkit",
             entity_id=labkit_id,
             action="UPDATE",
-            description=f"Labkit {barcode} updated",
+            description=f"Labkit {barcode_value or barcode} updated",
         )
         if status != existing["status"]:
             log_audit_event(
@@ -745,13 +791,13 @@ def handle_update_labkit():
     finally:
         db_session.close()
     if status != existing["status"]:
-        update_labkit_status(barcode, status, created_by=current_username())
+        update_labkit_status(barcode_value or barcode, status, created_by=current_username())
     else:
         try:
             add_labkit_event(labkit_id, "updated", "Labkit updated", created_by=current_username())
         except Exception:
             pass
-    return redirect(url_for("labkits_page", message=f"Labkit '{barcode}' updated."))
+    return redirect(url_for("labkits_page", message=f"Labkit '{barcode_value or barcode}' updated."))
 
 
 @app.route("/labkits/delete", methods=["POST"])
@@ -770,7 +816,7 @@ def handle_delete_labkit():
             entity_type="Labkit",
             entity_id=labkit_id,
             action="DELETE",
-            description=f"Labkit {labkit.get('kit_barcode')} deleted",
+            description=f"Labkit {(labkit.get('barcode_value') or labkit.get('kit_barcode'))} deleted",
         )
         db_session.commit()
     finally:
@@ -860,6 +906,7 @@ def export_labkits():
     rows = list_labkits_with_names()
     headers = [
         "kit_barcode",
+        "barcode_value",
         "labkit_type",
         "site",
         "status",
@@ -871,6 +918,7 @@ def export_labkits():
     for r in rows:
         values = [
             r.get("kit_barcode") or "",
+            r.get("barcode_value") or "",
             r.get("labkit_type_name") or "",
             r.get("site_name") or "",
             r.get("status") or "",
@@ -1140,7 +1188,7 @@ TEMPLATE = """
           <tbody>
           {% for k in labkits %}
           <tr>
-            <td>{{ k.id }}</td><td>{{ k.kit_barcode }}</td><td>{{ k.labkit_type_id }}</td>
+            <td>{{ k.id }}</td><td>{{ k.barcode_value or k.kit_barcode }}</td><td>{{ k.labkit_type_id }}</td>
             <td>{{ k.site_id }}</td><td>{{ k.lot_number }}</td><td>{{ k.expiry_date }}</td>
             <td><span class="badge status-{{ k.status|replace(' ', '_') }}">{{ k.status }}</span></td><td>{{ k.created_at }}</td><td>{{ k.updated_at }}</td>
           </tr>
@@ -1352,7 +1400,8 @@ LABKITS_TEMPLATE = """
         <div class="form-row">
           <div class="form-field">
             <label>Barcode</label>
-            <input class="form-control" type="text" name="kit_barcode" required>
+            <input class="form-control" type="text" value="Auto-generated on save" readonly>
+            <p class="muted small-text">Generated per kit type (prefix + 4 digits).</p>
           </div>
           <div class="form-field">
             <label>Lot Number</label>
@@ -1383,7 +1432,10 @@ LABKITS_TEMPLATE = """
           <p class="eyebrow">Inventory</p>
           <h2><span class="icon">📦</span>Existing Labkits</h2>
         </div>
-        <a class="btn btn-secondary" href="{{ url_for('export_labkits') }}"><span class="icon">📤</span>Export CSV</a>
+        <div class="button-row">
+          <a class="btn btn-secondary" href="{{ url_for('export_labkits') }}"><span class="icon">📤</span>Export CSV</a>
+          <a class="btn btn-secondary" href="{{ url_for('labkits_barcodes_csv') }}"><span class="icon">🖨️</span>Barcodes CSV</a>
+        </div>
       </div>
       <div class="table-wrapper">
         <table>
@@ -1396,7 +1448,7 @@ LABKITS_TEMPLATE = """
           {% for k in labkits %}
           <tr>
             <td>{{ k.id }}</td>
-            <td>{{ k.kit_barcode }}</td>
+            <td>{{ k.barcode_value or k.kit_barcode }}</td>
             <td>{{ k.labkit_type_name }}</td>
             <td>{{ k.site_name or 'Central depot' }}</td>
             <td>{{ k.lot_number }}</td>
@@ -1405,7 +1457,8 @@ LABKITS_TEMPLATE = """
             <td class="actions">
               <form method="post" action="{{ url_for('handle_update_labkit') }}" class="inline-form">
                 <input type="hidden" name="id" value="{{ k.id }}">
-                <input class="form-control" type="text" name="kit_barcode" value="{{ k.kit_barcode }}" required>
+                <input class="form-control" type="text" name="kit_barcode" value="{{ k.barcode_value or k.kit_barcode }}" readonly>
+                <input type="hidden" name="barcode_value" value="{{ k.barcode_value }}">
                 <select class="form-control" name="labkit_type_id" required>
                   {% for t in labkit_types %}
                   <option value="{{ t.id }}" {% if t.id == k.labkit_type_id %}selected{% endif %}>{{ t.name }}</option>
@@ -1792,7 +1845,7 @@ SHIPMENTS_TEMPLATE = """
           <label>Labkits</label>
           <select class="form-control" name="labkit_ids" multiple>
             {% for lk in unassigned_labkits %}
-            <option value="{{ lk.id }}">{{ lk.kit_barcode }} ({{ lk.labkit_type_name }})</option>
+            <option value="{{ lk.id }}">{{ lk.barcode_value or lk.kit_barcode }} ({{ lk.labkit_type_name }})</option>
             {% endfor %}
           </select>
           <p class="muted small-text">Hold Cmd/Ctrl to select multiple kits.</p>
@@ -1916,7 +1969,7 @@ SHIPMENT_DETAIL_TEMPLATE = """
           <label>Labkits</label>
           <select class="form-control" name="labkit_ids" multiple>
             {% for lk in labkit_options %}
-            <option value="{{ lk.id }}" {% if lk.id in selected_labkit_ids %}selected{% endif %}>{{ lk.kit_barcode }} ({{ lk.labkit_type_name }})</option>
+            <option value="{{ lk.id }}" {% if lk.id in selected_labkit_ids %}selected{% endif %}>{{ lk.barcode_value or lk.kit_barcode }} ({{ lk.labkit_type_name }})</option>
             {% endfor %}
           </select>
           <p class="muted small-text">Hold Cmd/Ctrl to multi-select.</p>
@@ -1939,7 +1992,7 @@ SHIPMENT_DETAIL_TEMPLATE = """
           {% for lk in shipment.labkits %}
           <tr>
             <td>{{ lk.id }}</td>
-            <td>{{ lk.kit_barcode }}</td>
+            <td>{{ lk.barcode_value or lk.kit_barcode }}</td>
             <td>{{ lk.labkit_type_name }}</td>
             <td><span class="badge status-{{ lk.status|replace(' ', '_') }}">{{ lk.status }}</span></td>
           </tr>
@@ -1969,19 +2022,24 @@ LABKIT_LABEL_TEMPLATE = """
     .label-card { border: 1px solid #111827; padding: 18px; width: 340px; border-radius: 12px; }
     .barcode { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
     .meta { margin: 6px 0; font-size: 14px; }
-    img { width: 180px; height: 180px; }
+    .barcode-img img { width: 260px; height: 100px; object-fit: contain; }
+    .barcode-text { font-size: 16px; font-weight: 600; letter-spacing: 0.08em; margin-top: 8px; }
     @media print { button { display: none; } body { margin: 0; } .label-card { box-shadow: none; border: 1px solid #000; } }
   </style>
 </head>
 <body>
   <div class="label-card">
-    <div class="barcode">Kit: {{ labkit.kit_barcode }}</div>
+    <div class="barcode">Kit: {{ barcode_value }}</div>
     <div class="meta">Type: {{ labkit.labkit_type_name }}</div>
     <div class="meta">Expiry: {{ labkit.expiry_date }}</div>
     <div class="meta">Status: {{ labkit.status }}</div>
-    <div><img src="{{ qr_uri }}" alt="QR code"></div>
+    <div class="barcode-img"><img src="{{ barcode_uri }}" alt="Barcode"></div>
+    <div class="barcode-text">{{ barcode_value }}</div>
   </div>
-  <button class="btn btn-primary" onclick="window.print()">Print</button>
+  <div style="margin-top: 12px; display: flex; gap: 8px;">
+    <button class="btn btn-primary" onclick="window.print()">Print</button>
+    <a class="btn btn-secondary" href="{{ url_for('labkit_label_csv', labkit_id=labkit.id) }}">Download CSV</a>
+  </div>
 </body>
 </html>
 """
@@ -2016,7 +2074,7 @@ LABKIT_DETAIL_TEMPLATE = """
 
   <main class="container">
     <div class="page-header">
-      <h1 class="page-title"><span class="icon">📦</span>Labkit {{ labkit.kit_barcode }}</h1>
+      <h1 class="page-title"><span class="icon">📦</span>Labkit {{ labkit.barcode_value or labkit.kit_barcode }}</h1>
       <p class="subtitle">Full history and metadata for this kit.</p>
     </div>
     {% if message %}<div class="alert success">{{ message }}</div>{% endif %}
@@ -2025,6 +2083,7 @@ LABKIT_DETAIL_TEMPLATE = """
     <div class="card">
       <h2><span class="icon">🧾</span>Summary</h2>
       <div class="meta-grid">
+        <div><p class="eyebrow">Barcode</p><p>{{ labkit.barcode_value or labkit.kit_barcode }}</p></div>
         <div><p class="eyebrow">Type</p><p>{{ labkit.labkit_type_name }}</p></div>
         <div><p class="eyebrow">Site</p><p>{{ labkit.site_name or 'Central depot' }}</p></div>
         <div><p class="eyebrow">Lot</p><p>{{ labkit.lot_number }}</p></div>
@@ -2234,7 +2293,7 @@ EXPIRY_TEMPLATE = """
           <tbody>
           {% for k in expired %}
           <tr class="row-alert">
-            <td>{{ k.kit_barcode }}</td>
+            <td>{{ k.barcode_value or k.kit_barcode }}</td>
             <td>{{ k.labkit_type_name }}</td>
             <td>{{ k.site_name or 'Central depot' }}</td>
             <td>{{ k.expiry_date }}</td>
@@ -2259,7 +2318,7 @@ EXPIRY_TEMPLATE = """
           <tbody>
           {% for k in soon %}
           <tr>
-            <td>{{ k.kit_barcode }}</td>
+            <td>{{ k.barcode_value or k.kit_barcode }}</td>
             <td>{{ k.labkit_type_name }}</td>
             <td>{{ k.site_name or 'Central depot' }}</td>
             <td>{{ k.expiry_date }}</td>
@@ -2284,7 +2343,7 @@ EXPIRY_TEMPLATE = """
           <tbody>
           {% for k in fine %}
           <tr>
-            <td>{{ k.kit_barcode }}</td>
+            <td>{{ k.barcode_value or k.kit_barcode }}</td>
             <td>{{ k.labkit_type_name }}</td>
             <td>{{ k.site_name or 'Central depot' }}</td>
             <td>{{ k.expiry_date }}</td>

@@ -40,14 +40,12 @@ def main():
     # --- Labkits ---
     print("Adding labkits...")
     kit1_id = add_labkit(
-        kit_barcode="KITBARCODE001",
         labkit_type_id=lkt_id,
         site_id=site_id,
         lot_number="LOT2025A",
         expiry_date=date(2025, 12, 31),
     )
     kit2_id = add_labkit(
-        kit_barcode="KITBARCODE002",
         labkit_type_id=lkt_id,
         site_id=site_id,
         lot_number="LOT2025B",
@@ -61,13 +59,18 @@ def main():
     print()
 
     # --- Status change example ---
-    print("Updating status of KITBARCODE001 to 'packed' and then 'shipped'...")
-    update_labkit_status("KITBARCODE001", "packed")
-    update_labkit_status("KITBARCODE001", "shipped")
+    first_code = None
+    if list_labkits():
+        first = list_labkits()[0]
+        first_code = first.get("barcode_value") or first.get("kit_barcode")
+    if first_code:
+        print(f"Updating status of {first_code} to 'packed' and then 'shipped'...")
+        update_labkit_status(first_code, "packed")
+        update_labkit_status(first_code, "shipped")
 
-    kit = get_labkit_by_barcode("KITBARCODE001")
-    print("\nUpdated KITBARCODE001:")
-    print(kit)
+        kit = get_labkit_by_barcode(first_code)
+        print(f"\nUpdated {first_code}:")
+        print(kit)
 
     print("\nDone.")
 
