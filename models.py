@@ -18,6 +18,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Float,
     create_engine,
     func,
 )
@@ -74,6 +75,8 @@ class LabkitType(Base):
     prefix = Column(String)
     description = Column(String)
     default_expiry_days = Column(Integer)
+    standard_weight = Column(Float)
+    weight_variance = Column(Float)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
     labkits = relationship("Labkit", back_populates="labkit_type")
@@ -88,6 +91,7 @@ class Labkit(Base):
     site_id = Column(Integer, ForeignKey("site.id"), nullable=True)  # nullable for depot
     barcode_value = Column(String, unique=True)
     lot_number = Column(String)
+    measured_weight = Column(Float)
     expiry_date = Column(Date)
     status = Column(
         String,

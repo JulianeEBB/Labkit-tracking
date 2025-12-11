@@ -129,6 +129,7 @@ def list_labkits_with_names() -> List[Dict[str, Any]]:
                 s.site_name,
                 l.status,
                 l.lot_number,
+                l.measured_weight,
                 l.expiry_date,
                 l.created_at
             FROM labkit l
@@ -292,6 +293,8 @@ def add_labkit_type(
     description: Optional[str] = None,
     default_expiry_days: Optional[int] = None,
     prefix: Optional[str] = None,
+    standard_weight: Optional[float] = None,
+    weight_variance: Optional[float] = None,
 ) -> int:
     """Insert a new labkit type and return its id."""
     conn = get_connection()
@@ -300,11 +303,25 @@ def add_labkit_type(
         prefix_value = (prefix or _derive_prefix(name)).upper()
         cur.execute(
             """
-            INSERT INTO labkit_type (name, prefix, description, default_expiry_days)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO labkit_type (
+                name,
+                prefix,
+                description,
+                default_expiry_days,
+                standard_weight,
+                weight_variance
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
-            (name, prefix_value, description, default_expiry_days),
+            (
+                name,
+                prefix_value,
+                description,
+                default_expiry_days,
+                standard_weight,
+                weight_variance,
+            ),
         )
         new_id = cur.fetchone()[0]
         conn.commit()
@@ -321,7 +338,15 @@ def list_labkit_types() -> List[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT id, name, prefix, description, default_expiry_days, created_at
+            SELECT
+                id,
+                name,
+                prefix,
+                description,
+                default_expiry_days,
+                standard_weight,
+                weight_variance,
+                created_at
             FROM labkit_type
             ORDER BY id;
             """
@@ -338,6 +363,8 @@ def update_labkit_type(
     description: Optional[str],
     default_expiry_days: Optional[int],
     prefix: Optional[str] = None,
+    standard_weight: Optional[float] = None,
+    weight_variance: Optional[float] = None,
 ) -> None:
     """Update a labkit type."""
     conn = get_connection()
@@ -350,10 +377,20 @@ def update_labkit_type(
             SET name = %s,
                 description = %s,
                 default_expiry_days = %s,
+                standard_weight = %s,
+                weight_variance = %s,
                 prefix = COALESCE(%s, prefix)
             WHERE id = %s;
             """,
-            (name, description, default_expiry_days, prefix_value, labkit_type_id),
+            (
+                name,
+                description,
+                default_expiry_days,
+                standard_weight,
+                weight_variance,
+                prefix_value,
+                labkit_type_id,
+            ),
         )
         conn.commit()
     finally:
@@ -388,6 +425,7 @@ def add_labkit(
     site_id: Optional[int],
     lot_number: Optional[str],
     expiry_date,
+    measured_weight: Optional[float] = None,
     kit_barcode: Optional[str] = None,
     created_by: Optional[str] = None,
 ) -> int:
@@ -406,12 +444,27 @@ def add_labkit(
                 cur.execute(
                     """
                     INSERT INTO labkit (
-                        kit_barcode, barcode_value, labkit_type_id, site_id, lot_number, expiry_date, status
+                        kit_barcode,
+                        barcode_value,
+                        labkit_type_id,
+                        site_id,
+                        lot_number,
+                        measured_weight,
+                        expiry_date,
+                        status
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, 'planned')
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'planned')
                     RETURNING id;
                     """,
-                    (candidate_barcode, barcode_value, labkit_type_id, site_id, lot_number, expiry_date),
+                    (
+                        candidate_barcode,
+                        barcode_value,
+                        labkit_type_id,
+                        site_id,
+                        lot_number,
+                        measured_weight,
+                        expiry_date,
+                    ),
                 )
                 new_id = cur.fetchone()[0]
                 conn.commit()
@@ -436,7 +489,7 @@ def get_labkit_by_barcode(barcode: str) -> Optional[Dict[str, Any]]:
         cur.execute(
             """
             SELECT id, kit_barcode, barcode_value, labkit_type_id, site_id, lot_number,
-                   expiry_date, status, created_at, updated_at
+                   measured_weight, expiry_date, status, created_at, updated_at
             FROM labkit
             WHERE kit_barcode = %s OR barcode_value = %s;
             """,
@@ -468,6 +521,7 @@ def list_labkits() -> List[Dict[str, Any]]:
                 l.site_id,
                 s.site_name,
                 l.lot_number,
+                l.measured_weight,
                 l.expiry_date,
                 l.status,
                 l.created_at,
@@ -541,8 +595,17 @@ def get_labkit_by_id(labkit_id: int) -> Optional[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT id, kit_barcode, labkit_type_id, site_id, lot_number,
-                   expiry_date, status, created_at, updated_at, barcode_value
+            SELECT id,
+                   kit_barcode,
+                   labkit_type_id,
+                   site_id,
+                   lot_number,
+                   measured_weight,
+                   expiry_date,
+                   status,
+                   created_at,
+                   updated_at,
+                   barcode_value
             FROM labkit
             WHERE id = %s;
             """,
@@ -574,6 +637,7 @@ def get_labkit_detail(labkit_id: int) -> Optional[Dict[str, Any]]:
                 l.site_id,
                 s.site_name,
                 l.lot_number,
+                l.measured_weight,
                 l.expiry_date,
                 l.status,
                 l.created_at,
@@ -602,6 +666,7 @@ def update_labkit(
     labkit_type_id: int,
     site_id: Optional[int],
     lot_number: Optional[str],
+    measured_weight,
     expiry_date,
     status: str,
 ) -> None:
@@ -617,6 +682,7 @@ def update_labkit(
                 labkit_type_id = %s,
                 site_id = %s,
                 lot_number = %s,
+                measured_weight = %s,
                 expiry_date = %s,
                 status = %s,
                 updated_at = NOW()
@@ -628,6 +694,7 @@ def update_labkit(
                 labkit_type_id,
                 site_id,
                 lot_number,
+                measured_weight,
                 expiry_date,
                 status,
                 labkit_id,

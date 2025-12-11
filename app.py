@@ -111,6 +111,19 @@ def parse_datetime(dt_str: str):
         return None
 
 
+def parse_optional_float(raw_value: str, field_label: str):
+    """Parse a float if provided; return (value, error_message)."""
+    if raw_value is None:
+        return None, None
+    trimmed = raw_value.strip()
+    if trimmed == "":
+        return None, None
+    try:
+        return float(trimmed), None
+    except ValueError:
+        return None, f"{field_label} must be a number"
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = ""
@@ -396,9 +409,19 @@ def handle_add_kit_type():
     description = request.form.get("description", "").strip() or None
     default_expiry_days_raw = request.form.get("default_expiry_days", "").strip()
     default_expiry_days = int(default_expiry_days_raw) if default_expiry_days_raw else None
+    standard_weight, weight_error = parse_optional_float(
+        request.form.get("standard_weight"), "Standard weight"
+    )
+    weight_variance, variance_error = parse_optional_float(
+        request.form.get("weight_variance"), "Weight variance"
+    )
+    if weight_error:
+        return redirect(url_for("kit_types", error=weight_error))
+    if variance_error:
+        return redirect(url_for("kit_types", error=variance_error))
     if not name:
         return redirect(url_for("kit_types", error="Name is required"))
-    add_labkit_type(name, description, default_expiry_days)
+    add_labkit_type(name, description, default_expiry_days, None, standard_weight, weight_variance)
     return redirect(url_for("kit_types", message=f"Kit type '{name}' saved."))
 
 
@@ -412,9 +435,27 @@ def handle_update_kit_type():
     description = request.form.get("description", "").strip() or None
     default_expiry_days_raw = request.form.get("default_expiry_days", "").strip()
     default_expiry_days = int(default_expiry_days_raw) if default_expiry_days_raw else None
+    standard_weight, weight_error = parse_optional_float(
+        request.form.get("standard_weight"), "Standard weight"
+    )
+    weight_variance, variance_error = parse_optional_float(
+        request.form.get("weight_variance"), "Weight variance"
+    )
+    if weight_error:
+        return redirect(url_for("kit_types", error=weight_error))
+    if variance_error:
+        return redirect(url_for("kit_types", error=variance_error))
     if not kit_type_id or not name:
         return redirect(url_for("kit_types", error="Name and id are required"))
-    update_labkit_type(kit_type_id, name, description, default_expiry_days)
+    update_labkit_type(
+        kit_type_id,
+        name,
+        description,
+        default_expiry_days,
+        None,
+        standard_weight,
+        weight_variance,
+    )
     return redirect(url_for("kit_types", message=f"Kit type '{name}' updated."))
 
 
@@ -704,8 +745,13 @@ def handle_add_labkit():
     labkit_type_id_raw = request.form.get("labkit_type_id", "").strip()
     site_id = request.form.get("site_id", "").strip()
     lot_number = request.form.get("lot_number", "").strip() or None
+    measured_weight, weight_error = parse_optional_float(
+        request.form.get("measured_weight"), "Measured weight"
+    )
     expiry_date_str = request.form.get("expiry_date", "").strip()
     status = request.form.get("status", "").strip() or "planned"
+    if weight_error:
+        return redirect(url_for("labkits_page", error=weight_error))
     expiry = parse_date(expiry_date_str)
     if not labkit_type_id_raw:
         return redirect(url_for("labkits_page", error="Labkit type is required"))
@@ -713,6 +759,7 @@ def handle_add_labkit():
         labkit_type_id=int(labkit_type_id_raw),
         site_id=int(site_id) if site_id else None,
         lot_number=lot_number,
+        measured_weight=measured_weight,
         expiry_date=expiry,
         created_by=current_username(),
     )
@@ -751,8 +798,13 @@ def handle_update_labkit():
     labkit_type_id = request.form.get("labkit_type_id", "").strip()
     site_id = request.form.get("site_id", "").strip()
     lot_number = request.form.get("lot_number", "").strip() or None
+    measured_weight, weight_error = parse_optional_float(
+        request.form.get("measured_weight"), "Measured weight"
+    )
     expiry_date_str = request.form.get("expiry_date", "").strip()
     status = request.form.get("status", "").strip() or existing["status"]
+    if weight_error:
+        return redirect(url_for("labkits_page", error=weight_error))
     expiry = parse_date(expiry_date_str)
     if not labkit_type_id:
         return redirect(url_for("labkits_page", error="Labkit type is required"))
@@ -763,6 +815,7 @@ def handle_update_labkit():
         labkit_type_id=int(labkit_type_id),
         site_id=int(site_id) if site_id else None,
         lot_number=lot_number,
+        measured_weight=measured_weight,
         expiry_date=expiry,
         status=status,
     )
@@ -843,10 +896,27 @@ def handle_add_site():
 def handle_add_labkit_type():
     name = request.form.get("name", "").strip()
     description = request.form.get("description", "").strip() or None
+    standard_weight, weight_error = parse_optional_float(
+        request.form.get("standard_weight"), "Standard weight"
+    )
+    weight_variance, variance_error = parse_optional_float(
+        request.form.get("weight_variance"), "Weight variance"
+    )
+    if weight_error:
+        return redirect(url_for("index", error=weight_error))
+    if variance_error:
+        return redirect(url_for("index", error=variance_error))
     if not name:
         return redirect(url_for("index", error="Labkit type name is required"))
     try:
-        add_labkit_type(name, description)
+        add_labkit_type(
+            name,
+            description,
+            None,
+            None,
+            standard_weight,
+            weight_variance,
+        )
         msg = f"Labkit type '{name}' added."
     except psycopg2.IntegrityError:
         msg = f"Labkit type '{name}' already exists."
@@ -1289,6 +1359,14 @@ KIT_TYPES_TEMPLATE = """
             <label>Default Expiry Days</label>
             <input class="form-control" type="number" name="default_expiry_days" min="0">
           </div>
+          <div class="form-field">
+            <label>Standard Weight (g)</label>
+            <input class="form-control" type="number" name="standard_weight" step="0.01" min="0" placeholder="e.g., 120.5">
+          </div>
+          <div class="form-field">
+            <label>Allowed Variance (± g)</label>
+            <input class="form-control" type="number" name="weight_variance" step="0.01" min="0" placeholder="e.g., 5">
+          </div>
         </div>
         <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Kit Type</button>
       </form>
@@ -1304,7 +1382,16 @@ KIT_TYPES_TEMPLATE = """
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>ID</th><th>Name</th><th>Description</th><th>Default Expiry Days</th><th>Created</th><th>Actions</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Default Expiry Days</th>
+              <th>Std Weight (g)</th>
+              <th>Variance (g)</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody>
           {% for t in labkit_types %}
@@ -1313,6 +1400,8 @@ KIT_TYPES_TEMPLATE = """
             <td>{{ t.name }}</td>
             <td>{{ t.description }}</td>
             <td>{{ t.default_expiry_days }}</td>
+            <td>{{ t.standard_weight }}</td>
+            <td>{{ t.weight_variance }}</td>
             <td>{{ t.created_at }}</td>
             <td class="actions">
               <form method="post" action="{{ url_for('handle_update_kit_type') }}" class="inline-form">
@@ -1320,6 +1409,8 @@ KIT_TYPES_TEMPLATE = """
                 <input class="form-control" type="text" name="name" value="{{ t.name }}" required>
                 <input class="form-control" type="text" name="description" value="{{ t.description or '' }}">
                 <input class="form-control" type="number" name="default_expiry_days" value="{{ t.default_expiry_days or '' }}" min="0">
+                <input class="form-control" type="number" name="standard_weight" value="{{ t.standard_weight or '' }}" step="0.01" min="0" placeholder="Standard weight (g)">
+                <input class="form-control" type="number" name="weight_variance" value="{{ t.weight_variance or '' }}" step="0.01" min="0" placeholder="Variance (g)">
                 <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
               <form method="post" action="{{ url_for('handle_delete_kit_type') }}" onsubmit="return confirm('Delete this kit type?');" class="inline-form">
@@ -1383,7 +1474,12 @@ LABKITS_TEMPLATE = """
             <select class="form-control" name="labkit_type_id" id="create-labkit-type" required>
               <option value="">-- choose --</option>
               {% for t in labkit_types %}
-              <option value="{{ t.id }}" data-expiry="{{ t.default_expiry_days or '' }}">{{ t.name }}</option>
+              <option
+                value="{{ t.id }}"
+                data-expiry="{{ t.default_expiry_days or '' }}"
+                data-weight="{{ t.standard_weight or '' }}"
+                data-variance="{{ t.weight_variance or '' }}"
+              >{{ t.name }}</option>
               {% endfor %}
             </select>
           </div>
@@ -1401,11 +1497,15 @@ LABKITS_TEMPLATE = """
           <div class="form-field">
             <label>Barcode</label>
             <input class="form-control" type="text" value="Auto-generated on save" readonly>
-            <p class="muted small-text">Generated per kit type (prefix + 4 digits).</p>
           </div>
           <div class="form-field">
             <label>Lot Number</label>
             <input class="form-control" type="text" name="lot_number">
+          </div>
+          <div class="form-field">
+            <label>Measured Weight (g)</label>
+            <input class="form-control" type="number" name="measured_weight" id="create-measured-weight" step="0.01" min="0" placeholder="e.g., 118.4">
+            <p class="small-text" id="weight-feedback"></p>
           </div>
         </div>
         <div class="form-row">
@@ -1437,26 +1537,27 @@ LABKITS_TEMPLATE = """
           <a class="btn btn-secondary" href="{{ url_for('labkits_barcodes_csv') }}"><span class="icon">🖨️</span>Barcodes CSV</a>
         </div>
       </div>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>Barcode</th><th>Labkit Type</th><th>Site</th><th>Lot</th><th>Expiry</th><th>Status</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for k in labkits %}
-          <tr>
-            <td>{{ k.id }}</td>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th><th>Barcode</th><th>Labkit Type</th><th>Site</th><th>Lot</th><th>Weight (g)</th><th>Expiry</th><th>Status</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for k in labkits %}
+              <tr>
+                <td>{{ k.id }}</td>
             <td>{{ k.barcode_value or k.kit_barcode }}</td>
             <td>{{ k.labkit_type_name }}</td>
             <td>{{ k.site_name or 'Central depot' }}</td>
             <td>{{ k.lot_number }}</td>
+            <td>{{ k.measured_weight if k.measured_weight is not none else '' }}</td>
             <td>{{ k.expiry_date }}</td>
-            <td><span class="badge status-{{ k.status|replace(' ', '_') }}">{{ k.status }}</span></td>
-            <td class="actions">
-              <form method="post" action="{{ url_for('handle_update_labkit') }}" class="inline-form">
-                <input type="hidden" name="id" value="{{ k.id }}">
+                <td><span class="badge status-{{ k.status|replace(' ', '_') }}">{{ k.status }}</span></td>
+                <td class="actions">
+                  <form method="post" action="{{ url_for('handle_update_labkit') }}" class="inline-form">
+                    <input type="hidden" name="id" value="{{ k.id }}">
                 <input class="form-control" type="text" name="kit_barcode" value="{{ k.barcode_value or k.kit_barcode }}" readonly>
                 <input type="hidden" name="barcode_value" value="{{ k.barcode_value }}">
                 <select class="form-control" name="labkit_type_id" required>
@@ -1466,11 +1567,12 @@ LABKITS_TEMPLATE = """
                 </select>
                 <select class="form-control" name="site_id">
                   <option value="" {% if not k.site_id %}selected{% endif %}>Central depot (no site)</option>
-                  {% for s in sites %}
-                  <option value="{{ s.id }}" {% if s.id == k.site_id %}selected{% endif %}>{{ s.site_name }}</option>
-                  {% endfor %}
-                </select>
+                    {% for s in sites %}
+                    <option value="{{ s.id }}" {% if s.id == k.site_id %}selected{% endif %}>{{ s.site_name }}</option>
+                    {% endfor %}
+                  </select>
                 <input class="form-control" type="text" name="lot_number" value="{{ k.lot_number or '' }}" placeholder="Lot #">
+                <input class="form-control" type="number" name="measured_weight" value="{{ k.measured_weight or '' }}" step="0.01" min="0" placeholder="Weight (g)">
                 <input class="form-control" type="date" name="expiry_date" value="{{ k.expiry_date }}">
                 <select class="form-control" name="status">
                   {% for st in status_options %}
@@ -1499,6 +1601,43 @@ LABKITS_TEMPLATE = """
     document.addEventListener('DOMContentLoaded', function() {
       const typeSelect = document.getElementById('create-labkit-type');
       const expiryInput = document.getElementById('create-expiry');
+      const weightInput = document.getElementById('create-measured-weight');
+      const weightFeedback = document.getElementById('weight-feedback');
+
+      function updateWeightFeedback() {
+        if (!typeSelect || !weightInput || !weightFeedback) return;
+        const opt = typeSelect.selectedOptions[0];
+        if (!opt) return;
+        const standard = parseFloat(opt.dataset.weight);
+        const variance = parseFloat(opt.dataset.variance);
+        const measured = parseFloat(weightInput.value);
+
+        // Clear when not enough info
+        if (isNaN(measured)) {
+          weightFeedback.textContent = "";
+          weightFeedback.className = "small-text";
+          return;
+        }
+        if (isNaN(standard) || isNaN(variance)) {
+          weightFeedback.textContent = "No standard weight defined for this kit type.";
+          weightFeedback.className = "small-text muted";
+          return;
+        }
+
+        const min = standard - variance;
+        const max = standard + variance;
+        const within = measured >= min && measured <= max;
+        const rangeText = `Expected: ${standard} ± ${variance} g (Range ${min.toFixed(2)}–${max.toFixed(2)} g)`;
+
+        if (within) {
+          weightFeedback.textContent = `Within expected range. ${rangeText}`;
+          weightFeedback.className = "small-text text-success";
+        } else {
+          weightFeedback.textContent = `Outside expected range. ${rangeText}`;
+          weightFeedback.className = "small-text text-danger";
+        }
+      }
+
       if (typeSelect && expiryInput) {
         typeSelect.addEventListener('change', function() {
           const days = parseInt(this.selectedOptions[0].getAttribute('data-expiry'));
@@ -1508,7 +1647,15 @@ LABKITS_TEMPLATE = """
             const iso = today.toISOString().split('T')[0];
             expiryInput.value = iso;
           }
+          updateWeightFeedback();
         });
+      }
+
+      if (typeSelect) {
+        typeSelect.addEventListener('change', updateWeightFeedback);
+      }
+      if (weightInput) {
+        weightInput.addEventListener('input', updateWeightFeedback);
       }
     });
   </script>
@@ -2087,6 +2234,7 @@ LABKIT_DETAIL_TEMPLATE = """
         <div><p class="eyebrow">Type</p><p>{{ labkit.labkit_type_name }}</p></div>
         <div><p class="eyebrow">Site</p><p>{{ labkit.site_name or 'Central depot' }}</p></div>
         <div><p class="eyebrow">Lot</p><p>{{ labkit.lot_number }}</p></div>
+        <div><p class="eyebrow">Measured Weight</p><p>{{ labkit.measured_weight if labkit.measured_weight is not none else '—' }} g</p></div>
         <div><p class="eyebrow">Expiry</p><p>{{ labkit.expiry_date }}</p></div>
         <div><p class="eyebrow">Status</p><p><span class="badge status-{{ labkit.status|replace(' ', '_') }}">{{ labkit.status }}</span></p></div>
         <div><p class="eyebrow">Created</p><p>{{ labkit.created_at }}</p></div>

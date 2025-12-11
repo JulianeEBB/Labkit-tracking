@@ -44,6 +44,8 @@ def initialize_database() -> None:
                 name TEXT UNIQUE NOT NULL,
                 prefix TEXT,
                 description TEXT,
+                standard_weight NUMERIC,
+                weight_variance NUMERIC,
                 default_expiry_days INTEGER,
                 created_at TIMESTAMP DEFAULT NOW()
             );
@@ -54,6 +56,8 @@ def initialize_database() -> None:
             """
             ALTER TABLE labkit_type
             ADD COLUMN IF NOT EXISTS prefix TEXT,
+            ADD COLUMN IF NOT EXISTS standard_weight NUMERIC,
+            ADD COLUMN IF NOT EXISTS weight_variance NUMERIC,
             ADD COLUMN IF NOT EXISTS default_expiry_days INTEGER;
             """
         )
@@ -81,6 +85,7 @@ def initialize_database() -> None:
                 site_id INTEGER REFERENCES site(id),
                 shipment_id INTEGER REFERENCES shipment(id),
                 lot_number TEXT,
+                measured_weight NUMERIC,
                 expiry_date DATE,
                 status TEXT DEFAULT 'planned',
                 created_at TIMESTAMP DEFAULT NOW(),
@@ -153,6 +158,7 @@ def initialize_database() -> None:
         cur.execute(
             """
             ALTER TABLE labkit
+            ADD COLUMN IF NOT EXISTS measured_weight NUMERIC,
             ADD COLUMN IF NOT EXISTS shipment_id INTEGER REFERENCES shipment(id);
             """
         )
