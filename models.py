@@ -62,6 +62,7 @@ class SiteContact(Base):
     role = Column(String)
     email = Column(String)
     phone = Column(String)
+    room_number = Column(String)
     is_primary = Column(Boolean, default=False, nullable=False)
 
     site = relationship("Site", back_populates="contacts")

@@ -3,6 +3,7 @@ import csv
 from functools import wraps
 import base64
 import io
+import zipfile
 
 from flask import Flask, redirect, render_template_string, request, session, url_for
 from flask import Response
@@ -10,6 +11,8 @@ from werkzeug.security import check_password_hash
 import psycopg2
 from barcode import Code39
 from barcode.writer import ImageWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 from init_db import initialize_database
 from models import AuditLog, SessionLocal
@@ -473,6 +476,8 @@ def handle_delete_kit_type():
 def handle_add_site_page():
     site_code = request.form.get("site_code", "").strip()
     site_name = request.form.get("site_name", "").strip()
+    investigator_name = request.form.get("investigator_name", "").strip()
+    investigator_room = request.form.get("investigator_room", "").strip() or None
     address_line1 = request.form.get("address_line1", "").strip() or None
     address_line2 = request.form.get("address_line2", "").strip() or None
     city = request.form.get("city", "").strip() or None
@@ -481,6 +486,8 @@ def handle_add_site_page():
     country = request.form.get("country", "").strip() or None
     if not site_code or not site_name:
         return redirect(url_for("sites_page", error="Site code and name are required"))
+    if not investigator_name:
+        return redirect(url_for("sites_page", error="Investigator name is required"))
     try:
         site_id = add_site(site_code, site_name)
     except psycopg2.IntegrityError:
@@ -495,6 +502,15 @@ def handle_add_site_page():
         state=state,
         postal_code=postal_code,
         country=country,
+    )
+    add_site_contact(
+        site_id=site_id,
+        name=investigator_name,
+        role="Investigator",
+        email=None,
+        phone=None,
+        room_number=investigator_room,
+        is_primary=True,
     )
     return redirect(url_for("sites_page", message="Site created."))
 
@@ -548,10 +564,11 @@ def handle_add_contact(site_id: int):
     role = request.form.get("role", "").strip() or None
     email = request.form.get("email", "").strip() or None
     phone = request.form.get("phone", "").strip() or None
+    room_number = request.form.get("room_number", "").strip() or None
     is_primary = bool(request.form.get("is_primary"))
     if not name:
         return redirect(url_for("site_detail", site_id=site_id, error="Name is required"))
-    add_site_contact(site_id, name, role, email, phone, is_primary)
+    add_site_contact(site_id, name, role, email, phone, room_number, is_primary)
     return redirect(url_for("site_detail", site_id=site_id, message="Contact added."))
 
 
@@ -568,10 +585,11 @@ def handle_update_contact(site_id: int):
     role = request.form.get("role", "").strip() or None
     email = request.form.get("email", "").strip() or None
     phone = request.form.get("phone", "").strip() or None
+    room_number = request.form.get("room_number", "").strip() or None
     is_primary = bool(request.form.get("is_primary"))
     if not name:
         return redirect(url_for("site_detail", site_id=site_id, error="Name is required"))
-    update_site_contact(contact_id, name, role, email, phone, is_primary)
+    update_site_contact(contact_id, name, role, email, phone, room_number, is_primary)
     return redirect(url_for("site_detail", site_id=site_id, message="Contact updated."))
 
 
@@ -1056,17 +1074,8 @@ def handle_history():
     return redirect(url_for("index", history_barcode=barcode))
 
 
-@app.route("/export/audit")
-@login_required
-def export_audit():
-    """Export audit log as CSV with optional filters."""
-    from_date_str = request.args.get("from_date", "").strip()
-    to_date_str = request.args.get("to_date", "").strip()
-    entity_type_filter = request.args.get("entity_type", "").strip()
-
-    from_date_val = parse_date(from_date_str)
-    to_date_val = parse_date(to_date_str)
-
+def _fetch_audit_rows(from_date_val, to_date_val, entity_type_filter):
+    """Shared helper to query audit rows with optional filters."""
     db_session = SessionLocal()
     try:
         query = db_session.query(AuditLog)
@@ -1080,8 +1089,23 @@ def export_audit():
             query = query.filter(AuditLog.timestamp < end_dt)
         query = query.order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
         rows = query.all()
+        return rows
     finally:
         db_session.close()
+
+
+@app.route("/export/audit")
+@login_required
+def export_audit():
+    """Export audit log as CSV with optional filters."""
+    from_date_str = request.args.get("from_date", "").strip()
+    to_date_str = request.args.get("to_date", "").strip()
+    entity_type_filter = request.args.get("entity_type", "").strip()
+
+    from_date_val = parse_date(from_date_str)
+    to_date_val = parse_date(to_date_str)
+
+    rows = _fetch_audit_rows(from_date_val, to_date_val, entity_type_filter)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1107,6 +1131,167 @@ def export_audit():
         csv_data,
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=audit_log.csv"},
+    )
+
+
+@app.route("/export/audit.pdf")
+@login_required
+def export_audit_pdf():
+    """Export audit log as a simple PDF (same filters as CSV)."""
+    from_date_str = request.args.get("from_date", "").strip()
+    to_date_str = request.args.get("to_date", "").strip()
+    entity_type_filter = request.args.get("entity_type", "").strip()
+
+    from_date_val = parse_date(from_date_str)
+    to_date_val = parse_date(to_date_str)
+
+    rows = _fetch_audit_rows(from_date_val, to_date_val, entity_type_filter)
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    margin = 36
+    y = height - margin
+
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(margin, y, "Audit Log Export")
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+    filter_text = f"Filters - entity: {entity_type_filter or 'All'}, from: {from_date_str or 'Any'}, to: {to_date_str or 'Any'}"
+    pdf.drawString(margin, y, filter_text)
+    y -= 20
+
+    headers = ["timestamp", "user", "entity", "id", "action", "field", "old", "new", "description"]
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(margin, y, " | ".join(headers))
+    y -= 14
+    pdf.setFont("Helvetica", 9)
+
+    for r in rows:
+        line = " | ".join(
+            [
+                str(r.timestamp),
+                r.user or "",
+                r.entity_type,
+                str(r.entity_id),
+                r.action,
+                r.field_name or "",
+                (r.old_value or "")[:60],
+                (r.new_value or "")[:60],
+                (r.description or "")[:80],
+            ]
+        )
+        # wrap if necessary
+        for chunk in [line[i : i + 150] for i in range(0, len(line), 150)]:
+            if y <= margin:
+                pdf.showPage()
+                y = height - margin
+                pdf.setFont("Helvetica", 9)
+            pdf.drawString(margin, y, chunk)
+            y -= 12
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    return Response(
+        buffer.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=audit_log.pdf"},
+    )
+
+
+@app.route("/export/audit/all")
+@login_required
+def export_audit_bundle():
+    """Export audit log as a ZIP containing both CSV and PDF."""
+    from_date_str = request.args.get("from_date", "").strip()
+    to_date_str = request.args.get("to_date", "").strip()
+    entity_type_filter = request.args.get("entity_type", "").strip()
+
+    from_date_val = parse_date(from_date_str)
+    to_date_val = parse_date(to_date_str)
+    rows = _fetch_audit_rows(from_date_val, to_date_val, entity_type_filter)
+
+    # CSV
+    csv_output = io.StringIO()
+    csv_writer = csv.writer(csv_output)
+    csv_writer.writerow(
+        ["timestamp", "user", "entity_type", "entity_id", "action", "field_name", "old_value", "new_value", "description"]
+    )
+    for r in rows:
+        csv_writer.writerow(
+            [
+                r.timestamp,
+                r.user or "",
+                r.entity_type,
+                r.entity_id,
+                r.action,
+                r.field_name or "",
+                r.old_value or "",
+                r.new_value or "",
+                r.description or "",
+            ]
+        )
+    csv_bytes = csv_output.getvalue().encode("utf-8")
+
+    # PDF
+    pdf_buffer = io.BytesIO()
+    pdf = canvas.Canvas(pdf_buffer, pagesize=letter)
+    width, height = letter
+    margin = 36
+    y = height - margin
+
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(margin, y, "Audit Log Export")
+    y -= 20
+    pdf.setFont("Helvetica", 10)
+    filter_text = f"Filters - entity: {entity_type_filter or 'All'}, from: {from_date_str or 'Any'}, to: {to_date_str or 'Any'}"
+    pdf.drawString(margin, y, filter_text)
+    y -= 20
+
+    headers = ["timestamp", "user", "entity", "id", "action", "field", "old", "new", "description"]
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(margin, y, " | ".join(headers))
+    y -= 14
+    pdf.setFont("Helvetica", 9)
+
+    for r in rows:
+        line = " | ".join(
+            [
+                str(r.timestamp),
+                r.user or "",
+                r.entity_type,
+                str(r.entity_id),
+                r.action,
+                r.field_name or "",
+                (r.old_value or "")[:60],
+                (r.new_value or "")[:60],
+                (r.description or "")[:80],
+            ]
+        )
+        for chunk in [line[i : i + 150] for i in range(0, len(line), 150)]:
+            if y <= margin:
+                pdf.showPage()
+                y = height - margin
+                pdf.setFont("Helvetica", 9)
+            pdf.drawString(margin, y, chunk)
+            y -= 12
+
+    pdf.showPage()
+    pdf.save()
+    pdf_bytes = pdf_buffer.getvalue()
+
+    # ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("audit_log.csv", csv_bytes)
+        zf.writestr("audit_log.pdf", pdf_bytes)
+    zip_buffer.seek(0)
+
+    return Response(
+        zip_buffer.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": "attachment; filename=audit_log_bundle.zip"},
     )
 
 
@@ -1189,8 +1374,8 @@ TEMPLATE = """
             <h2><span class="icon">📜</span>Export Audit Log</h2>
           </div>
         </div>
-        <p class="muted">Download the full audit trail as CSV.</p>
-        <a class="btn btn-secondary" href="{{ url_for('export_audit') }}"><span class="icon">📜</span>Download audit CSV</a>
+        <p class="muted">Download the audit trail (CSV and PDF bundle).</p>
+        <a class="btn btn-secondary" href="{{ url_for('export_audit_bundle') }}"><span class="icon">📜</span>Download audit files</a>
       </div>
     </div>
 
@@ -1560,9 +1745,12 @@ LABKITS_TEMPLATE = """
                     <input type="hidden" name="id" value="{{ k.id }}">
                 <input class="form-control" type="text" name="kit_barcode" value="{{ k.barcode_value or k.kit_barcode }}" readonly>
                 <input type="hidden" name="barcode_value" value="{{ k.barcode_value }}">
-                <select class="form-control" name="labkit_type_id" required>
+                <select class="form-control" name="labkit_type_id" required data-kit-id="{{ k.id }}">
                   {% for t in labkit_types %}
-                  <option value="{{ t.id }}" {% if t.id == k.labkit_type_id %}selected{% endif %}>{{ t.name }}</option>
+                  <option value="{{ t.id }}"
+                    data-weight="{{ t.standard_weight or '' }}"
+                    data-variance="{{ t.weight_variance or '' }}"
+                    {% if t.id == k.labkit_type_id %}selected{% endif %}>{{ t.name }}</option>
                   {% endfor %}
                 </select>
                 <select class="form-control" name="site_id">
@@ -1570,9 +1758,10 @@ LABKITS_TEMPLATE = """
                     {% for s in sites %}
                     <option value="{{ s.id }}" {% if s.id == k.site_id %}selected{% endif %}>{{ s.site_name }}</option>
                     {% endfor %}
-                  </select>
+                </select>
                 <input class="form-control" type="text" name="lot_number" value="{{ k.lot_number or '' }}" placeholder="Lot #">
-                <input class="form-control" type="number" name="measured_weight" value="{{ k.measured_weight or '' }}" step="0.01" min="0" placeholder="Weight (g)">
+                <input class="form-control update-weight" data-kit-id="{{ k.id }}" type="number" name="measured_weight" value="{{ k.measured_weight or '' }}" step="0.01" min="0" placeholder="Weight (g)">
+                <p class="small-text" id="weight-feedback-{{ k.id }}"></p>
                 <input class="form-control" type="date" name="expiry_date" value="{{ k.expiry_date }}">
                 <select class="form-control" name="status">
                   {% for st in status_options %}
@@ -1597,30 +1786,28 @@ LABKITS_TEMPLATE = """
   </main>
 
   <script>
-    // Prefill expiry based on kit type default days when empty
     document.addEventListener('DOMContentLoaded', function() {
-      const typeSelect = document.getElementById('create-labkit-type');
-      const expiryInput = document.getElementById('create-expiry');
-      const weightInput = document.getElementById('create-measured-weight');
-      const weightFeedback = document.getElementById('weight-feedback');
-
-      function updateWeightFeedback() {
-        if (!typeSelect || !weightInput || !weightFeedback) return;
+      // Shared helper for weight range feedback
+      function renderWeightFeedback(typeSelect, weightInput, feedbackEl) {
+        if (!typeSelect || !weightInput || !feedbackEl) return;
         const opt = typeSelect.selectedOptions[0];
-        if (!opt) return;
+        if (!opt) {
+          feedbackEl.textContent = "";
+          feedbackEl.className = "small-text";
+          return;
+        }
         const standard = parseFloat(opt.dataset.weight);
         const variance = parseFloat(opt.dataset.variance);
         const measured = parseFloat(weightInput.value);
 
-        // Clear when not enough info
         if (isNaN(measured)) {
-          weightFeedback.textContent = "";
-          weightFeedback.className = "small-text";
+          feedbackEl.textContent = "";
+          feedbackEl.className = "small-text";
           return;
         }
         if (isNaN(standard) || isNaN(variance)) {
-          weightFeedback.textContent = "No standard weight defined for this kit type.";
-          weightFeedback.className = "small-text muted";
+          feedbackEl.textContent = "No standard weight defined for this kit type.";
+          feedbackEl.className = "small-text muted";
           return;
         }
 
@@ -1630,13 +1817,19 @@ LABKITS_TEMPLATE = """
         const rangeText = `Expected: ${standard} ± ${variance} g (Range ${min.toFixed(2)}–${max.toFixed(2)} g)`;
 
         if (within) {
-          weightFeedback.textContent = `Within expected range. ${rangeText}`;
-          weightFeedback.className = "small-text text-success";
+          feedbackEl.textContent = `Within expected range. ${rangeText}`;
+          feedbackEl.className = "small-text text-success";
         } else {
-          weightFeedback.textContent = `Outside expected range. ${rangeText}`;
-          weightFeedback.className = "small-text text-danger";
+          feedbackEl.textContent = `Outside expected range. ${rangeText}`;
+          feedbackEl.className = "small-text text-danger";
         }
       }
+
+      // Prefill expiry based on kit type default days when empty (create form)
+      const typeSelect = document.getElementById('create-labkit-type');
+      const expiryInput = document.getElementById('create-expiry');
+      const weightInput = document.getElementById('create-measured-weight');
+      const weightFeedback = document.getElementById('weight-feedback');
 
       if (typeSelect && expiryInput) {
         typeSelect.addEventListener('change', function() {
@@ -1647,16 +1840,35 @@ LABKITS_TEMPLATE = """
             const iso = today.toISOString().split('T')[0];
             expiryInput.value = iso;
           }
-          updateWeightFeedback();
+          renderWeightFeedback(typeSelect, weightInput, weightFeedback);
         });
       }
 
       if (typeSelect) {
-        typeSelect.addEventListener('change', updateWeightFeedback);
+        typeSelect.addEventListener('change', function() {
+          renderWeightFeedback(typeSelect, weightInput, weightFeedback);
+        });
       }
       if (weightInput) {
-        weightInput.addEventListener('input', updateWeightFeedback);
+        weightInput.addEventListener('input', function() {
+          renderWeightFeedback(typeSelect, weightInput, weightFeedback);
+        });
       }
+
+      // Inline update forms: show same weight range feedback
+      const updateWeightInputs = document.querySelectorAll('.update-weight');
+      updateWeightInputs.forEach(function(input) {
+        const kitId = input.dataset.kitId;
+        const select = document.querySelector(`select[data-kit-id="${kitId}"]`);
+        const feedback = document.getElementById(`weight-feedback-${kitId}`);
+        if (!select || !feedback) return;
+        const handler = function() {
+          renderWeightFeedback(select, input, feedback);
+        };
+        select.addEventListener('change', handler);
+        input.addEventListener('input', handler);
+        handler(); // run once on load to populate when data exists
+      });
     });
   </script>
 </body>
@@ -1740,6 +1952,17 @@ SITES_TEMPLATE = """
             <input class="form-control" type="text" name="country">
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>Investigator Name <span class="muted">(site lead)</span></label>
+            <input class="form-control" type="text" name="investigator_name" required placeholder="e.g., Dr. Jane Doe">
+          </div>
+          <div class="form-field">
+            <label>Investigator Room #</label>
+            <input class="form-control" type="text" name="investigator_room" placeholder="e.g., B312">
+          </div>
+        </div>
+        <p class="muted small-text">Investigator contact is created automatically with the role "Investigator" and marked as primary for this site.</p>
         <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Site</button>
       </form>
     </div>
@@ -1857,6 +2080,12 @@ SITE_DETAIL_TEMPLATE = """
             <input class="form-control" type="tel" name="phone">
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>Room Number</label>
+            <input class="form-control" type="text" name="room_number" placeholder="e.g., B312">
+          </div>
+        </div>
         <label class="checkbox">
           <input type="checkbox" name="is_primary" value="1"> Primary contact
         </label>
@@ -1873,7 +2102,7 @@ SITE_DETAIL_TEMPLATE = """
       </div>
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Primary</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Phone</th><th>Room</th><th>Primary</th><th>Actions</th></tr></thead>
           <tbody>
           {% for c in contacts %}
           <tr>
@@ -1881,6 +2110,7 @@ SITE_DETAIL_TEMPLATE = """
             <td>{{ c.role }}</td>
             <td>{{ c.email }}</td>
             <td>{{ c.phone }}</td>
+            <td>{{ c.room_number }}</td>
             <td>{{ 'Yes' if c.is_primary else 'No' }}</td>
             <td class="actions">
               <form method="post" action="{{ url_for('handle_update_contact', site_id=site.id) }}" class="inline-form">
@@ -1889,6 +2119,7 @@ SITE_DETAIL_TEMPLATE = """
                 <input class="form-control" type="text" name="role" value="{{ c.role or '' }}">
                 <input class="form-control" type="email" name="email" value="{{ c.email or '' }}">
                 <input class="form-control" type="tel" name="phone" value="{{ c.phone or '' }}">
+                <input class="form-control" type="text" name="room_number" value="{{ c.room_number or '' }}" placeholder="Room #">
                 <label class="checkbox inline"><input type="checkbox" name="is_primary" value="1" {% if c.is_primary %}checked{% endif %}> Primary</label>
                 <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>

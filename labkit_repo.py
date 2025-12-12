@@ -730,7 +730,7 @@ def list_site_contacts(site_id: int) -> List[Dict[str, Any]]:
     try:
         cur.execute(
             """
-            SELECT id, site_id, name, role, email, phone, is_primary
+            SELECT id, site_id, name, role, email, phone, room_number, is_primary
             FROM site_contact
             WHERE site_id = %s
             ORDER BY id;
@@ -749,6 +749,7 @@ def add_site_contact(
     role: Optional[str],
     email: Optional[str],
     phone: Optional[str],
+    room_number: Optional[str],
     is_primary: bool = False,
 ) -> int:
     """Add a contact to a site and return its id."""
@@ -757,11 +758,11 @@ def add_site_contact(
     try:
         cur.execute(
             """
-            INSERT INTO site_contact (site_id, name, role, email, phone, is_primary)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO site_contact (site_id, name, role, email, phone, room_number, is_primary)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id;
             """,
-            (site_id, name, role, email, phone, is_primary),
+            (site_id, name, role, email, phone, room_number, is_primary),
         )
         new_id = cur.fetchone()[0]
         conn.commit()
@@ -777,6 +778,7 @@ def update_site_contact(
     role: Optional[str],
     email: Optional[str],
     phone: Optional[str],
+    room_number: Optional[str],
     is_primary: bool,
 ) -> None:
     """Update a site contact."""
@@ -790,10 +792,11 @@ def update_site_contact(
                 role = %s,
                 email = %s,
                 phone = %s,
+                room_number = %s,
                 is_primary = %s
             WHERE id = %s;
             """,
-            (name, role, email, phone, is_primary, contact_id),
+            (name, role, email, phone, room_number, is_primary, contact_id),
         )
         conn.commit()
     finally:

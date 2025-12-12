@@ -172,8 +172,16 @@ def initialize_database() -> None:
                 role TEXT,
                 email TEXT,
                 phone TEXT,
+                room_number TEXT,
                 is_primary BOOLEAN DEFAULT FALSE
             );
+            """
+        )
+        # Ensure new contact columns exist for older databases
+        cur.execute(
+            """
+            ALTER TABLE site_contact
+            ADD COLUMN IF NOT EXISTS room_number TEXT;
             """
         )
 
