@@ -887,10 +887,12 @@ def labkit_requisition(labkit_id: int):
     if acroform is not None:
         acroform.update({NameObject("/NeedAppearances"): BooleanObject(True)})
 
-    # Overlay barcode image inside the barcode field bounds (if present)
+    # Overlay barcode image inside every barcode field bounds (if present)
     if barcode_value:
-        page_idx, rect = _find_field_rect(reader, "barcode")
-        if page_idx is not None and rect:
+        matches = _find_field_rects(reader, "barcode")
+        for page_idx, rect in matches:
+            if not rect:
+                continue
             x1, y1, x2, y2 = rect
             img_width = max(1.0, x2 - x1 - 2)  # small padding
             img_height = max(1.0, y2 - y1 - 2)
