@@ -433,11 +433,11 @@ def add_labkit(
     conn = get_connection()
     cur = conn.cursor()
     try:
+        prefix = _ensure_labkit_type_prefix(cur, labkit_type_id)
+        next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix)
         attempts = 0
-        while attempts < 5:
-            cur.execute("BEGIN;")
-            prefix = _ensure_labkit_type_prefix(cur, labkit_type_id)
-            next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix)
+        # Allow more retries and bump the suffix each time to escape collisions.
+        while attempts < 50:
             barcode_value = f"{prefix}-{next_seq:04d}"
             candidate_barcode = kit_barcode or barcode_value
             try:
@@ -473,9 +473,9 @@ def add_labkit(
             except psycopg2.IntegrityError:
                 conn.rollback()
                 attempts += 1
-                # Another concurrent insert likely took the number; retry with the next sequence
+                next_seq += 1
                 continue
-        raise RuntimeError("Could not allocate a unique barcode after multiple attempts")
+        raise RuntimeError("Could not allocate a unique barcode after multiple attempts; tried 50 suffixes")
     finally:
         cur.close()
         conn.close()

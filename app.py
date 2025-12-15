@@ -3,6 +3,8 @@ import csv
 from functools import wraps
 import base64
 import io
+import os
+import re
 import zipfile
 
 from flask import Flask, redirect, render_template_string, request, session, url_for
@@ -12,7 +14,11 @@ import psycopg2
 from barcode import Code39
 from barcode.writer import ImageWriter
 from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code39
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
+from pypdf import PdfReader, PdfWriter
+from pypdf.generic import BooleanObject, DictionaryObject, NameObject
 
 from init_db import initialize_database
 from models import AuditLog, SessionLocal
@@ -478,8 +484,7 @@ def handle_add_site_page():
     site_name = request.form.get("site_name", "").strip()
     investigator_name = request.form.get("investigator_name", "").strip()
     investigator_room = request.form.get("investigator_room", "").strip() or None
-    address_line1 = request.form.get("address_line1", "").strip() or None
-    address_line2 = request.form.get("address_line2", "").strip() or None
+    address_line = request.form.get("address_line", "").strip() or None
     city = request.form.get("city", "").strip() or None
     state = request.form.get("state", "").strip() or None
     postal_code = request.form.get("postal_code", "").strip() or None
@@ -496,8 +501,8 @@ def handle_add_site_page():
         site_id=site_id,
         site_code=site_code,
         site_name=site_name,
-        address_line1=address_line1,
-        address_line2=address_line2,
+        address_line1=address_line,
+        address_line2=None,
         city=city,
         state=state,
         postal_code=postal_code,
@@ -523,8 +528,7 @@ def handle_update_site():
         return redirect(url_for("sites_page", error="Invalid site id"))
     site_code = request.form.get("site_code", "").strip()
     site_name = request.form.get("site_name", "").strip()
-    address_line1 = request.form.get("address_line1", "").strip() or None
-    address_line2 = request.form.get("address_line2", "").strip() or None
+    address_line = request.form.get("address_line", "").strip() or None
     city = request.form.get("city", "").strip() or None
     state = request.form.get("state", "").strip() or None
     postal_code = request.form.get("postal_code", "").strip() or None
@@ -535,8 +539,8 @@ def handle_update_site():
         site_id=site_id,
         site_code=site_code,
         site_name=site_name,
-        address_line1=address_line1,
-        address_line2=address_line2,
+        address_line1=address_line,
+        address_line2=None,
         city=city,
         state=state,
         postal_code=postal_code,
@@ -704,9 +708,86 @@ def _barcode_data_uri(text: str) -> str:
         return ""
     barcode_obj = Code39(text, writer=ImageWriter(), add_checksum=False)
     buf = io.BytesIO()
-    barcode_obj.write(buf, options={"write_text": False})
+    barcode_obj.write(buf, options={"write_text": False, "dpi": 1000})
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
+
+
+def _barcode_png_bytes(text: str) -> bytes:
+    """Generate a Code39 barcode image and return PNG bytes."""
+    if not text:
+        return b""
+    barcode_obj = Code39(text, writer=ImageWriter(), add_checksum=False)
+    buf = io.BytesIO()
+    barcode_obj.write(buf, options={"write_text": False, "dpi": 1000})
+    return buf.getvalue()
+
+
+def _requisition_template_path(kit_type_name: str) -> str:
+    """Resolve the PDF template path for a given kit type (robust to slashes/spaces)."""
+    base_dir = os.environ.get("REQUISITION_TEMPLATE_DIR", "/Users/julianeschikora/Documents/PDFs")
+    name = kit_type_name or ""
+
+    def _normalize(value: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", value.lower())
+
+    target_key = _normalize(name)
+    # Try to find a PDF whose stem matches the kit type after stripping punctuation/slashes.
+    if target_key:
+        try:
+            for fname in os.listdir(base_dir):
+                if not fname.lower().endswith(".pdf"):
+                    continue
+                stem, _ = os.path.splitext(fname)
+                if _normalize(stem) == target_key:
+                    return os.path.join(base_dir, fname)
+        except FileNotFoundError:
+            pass
+
+    # Fallback: sanitize slashes/whitespace to underscores.
+    safe_name = re.sub(r"[^\w.-]+", "_", name) or "template"
+    return os.path.join(base_dir, f"{safe_name}.pdf")
+
+
+def _find_field_rect(reader: PdfReader, field_name: str):
+    """Return (page_index, rect) for the given field name, or (None, None)."""
+    for idx, page in enumerate(reader.pages):
+        annots = page.get("/Annots")
+        if not annots:
+            continue
+        for annot_ref in annots:
+            annot = annot_ref.get_object()
+            if annot.get("/T") == field_name:
+                rect = annot.get("/Rect")
+                if rect and len(rect) == 4:
+                    return idx, [float(v) for v in rect]
+    return None, None
+
+
+def _find_field_rects(reader: PdfReader, field_name: str):
+    """Return list of (page_index, rect) for all fields matching the name."""
+    matches = []
+    for idx, page in enumerate(reader.pages):
+        annots = page.get("/Annots")
+        if not annots:
+            continue
+        for annot_ref in annots:
+            annot = annot_ref.get_object()
+            if annot.get("/T") == field_name:
+                rect = annot.get("/Rect")
+                if rect and len(rect) == 4:
+                    matches.append((idx, [float(v) for v in rect]))
+    return matches
+
+
+def _select_investigator_contact(site_id: int):
+    """Pick the investigator/primary contact for a site."""
+    if not site_id:
+        return None
+    contacts = list_site_contacts(site_id) or []
+    investigator = next((c for c in contacts if (c.get("role") or "").lower() == "investigator"), None)
+    primary = next((c for c in contacts if c.get("is_primary")), None)
+    return investigator or primary or (contacts[0] if contacts else None)
 
 
 @app.route("/labkits/<int:labkit_id>/label")
@@ -739,6 +820,106 @@ def labkit_label_csv(labkit_id: int):
         csv_data,
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename=labkit-{labkit_id}-label.csv"},
+    )
+
+
+@app.route("/labkits/<int:labkit_id>/requisition.pdf")
+@login_required
+def labkit_requisition(labkit_id: int):
+    """Generate a filled requisition PDF for a specific labkit."""
+    labkit = get_labkit_detail(labkit_id)
+    if not labkit:
+        return redirect(url_for("labkits_page", error="Labkit not found"))
+
+    barcode_value = labkit.get("barcode_value") or labkit.get("kit_barcode") or ""
+    kit_type_name = labkit.get("labkit_type_name") or ""
+    template_path = _requisition_template_path(kit_type_name)
+    if not os.path.exists(template_path):
+        return redirect(
+            url_for("labkits_page", error=f"Requisition template for '{kit_type_name}' not found.")
+        )
+
+    site = get_site(labkit.get("site_id")) if labkit.get("site_id") else None
+    contact = _select_investigator_contact(site["id"]) if site else None
+    address_line = (site or {}).get("address_line1") or (site or {}).get("address_line2") or ""
+
+    field_values = {
+        "site_number": (site or {}).get("site_code") or "",
+        "investigator_name": (contact or {}).get("name") or "",
+        "adress_line": address_line,
+        "address_line": address_line,  # support template variants with correct spelling
+        "investigator_room_number": (contact or {}).get("room_number") or "",
+        "city": (site or {}).get("city") or "",
+        "state_abbreviation": (site or {}).get("state") or "",
+        "postal_code": (site or {}).get("postal_code") or "",
+        "country": (site or {}).get("country") or "",
+        "kit_type_name": kit_type_name,
+        "barcode": "",
+        "barcode_number": barcode_value,
+    }
+
+    reader = PdfReader(template_path)
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+
+    # Ensure an AcroForm is present before updating fields
+    acroform = reader.trailer["/Root"].get("/AcroForm")
+    has_fields = False
+    if acroform:
+        acroform_obj = acroform.get_object()
+        has_fields = bool(acroform_obj.get("/Fields"))
+        writer_acroform = DictionaryObject()
+        for key, value in acroform_obj.items():
+            writer_acroform[NameObject(key)] = value
+        writer._root_object.update({NameObject("/AcroForm"): writer._add_object(writer_acroform)})
+    else:
+        writer._root_object.update({NameObject("/AcroForm"): writer._add_object(DictionaryObject())})
+
+    # Only try to write form values if the template actually contains fields
+    if has_fields:
+        # Apply values to every page in case the field is repeated across pages.
+        for page in writer.pages:
+            writer.update_page_form_field_values(page, field_values)
+
+    # Ensure form appearances render properly
+    acroform = writer._root_object.get("/AcroForm")
+    if acroform is not None:
+        acroform.update({NameObject("/NeedAppearances"): BooleanObject(True)})
+
+    # Overlay barcode image inside the barcode field bounds (if present)
+    if barcode_value:
+        page_idx, rect = _find_field_rect(reader, "barcode")
+        if page_idx is not None and rect:
+            x1, y1, x2, y2 = rect
+            img_width = max(1.0, x2 - x1 - 2)  # small padding
+            img_height = max(1.0, y2 - y1 - 2)
+            page = writer.pages[page_idx]
+            page_width = float(page.mediabox.width)
+            page_height = float(page.mediabox.height)
+            overlay_buf = io.BytesIO()
+            c = canvas.Canvas(overlay_buf, pagesize=(page_width, page_height))
+            # Draw vector barcode scaled to the target rect for crisp output
+            bc = code39.Standard39(barcode_value, checksum=0, barHeight=img_height, stop=1, quiet=1)
+            scale_x = img_width / bc.width if bc.width else 1.0
+            scale_y = img_height / bc.height if bc.height else 1.0
+            c.saveState()
+            c.translate(x1 + 1, y1 + 1)
+            c.scale(scale_x, scale_y)
+            bc.drawOn(c, 0, 0)
+            c.restoreState()
+            c.save()
+            overlay_pdf = PdfReader(io.BytesIO(overlay_buf.getvalue()))
+            writer.pages[page_idx].merge_page(overlay_pdf.pages[0])
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    filename = f"requisition-{barcode_value or labkit_id}.pdf"
+    return Response(
+        output.getvalue(),
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -1775,6 +1956,7 @@ LABKITS_TEMPLATE = """
                 <button type="submit" class="btn btn-danger"><span class="icon">🗑️</span>Delete</button>
               </form>
               <a class="btn btn-link" href="{{ url_for('labkit_detail_page', labkit_id=k.id) }}"><span class="icon">📄</span>Details</a>
+              <a class="btn btn-link" href="{{ url_for('labkit_requisition', labkit_id=k.id) }}"><span class="icon">📄</span>Requisition</a>
               <a class="btn btn-link" href="{{ url_for('labkit_label', labkit_id=k.id) }}" target="_blank"><span class="icon">🖨️</span>Print label</a>
             </td>
           </tr>
@@ -1926,12 +2108,8 @@ SITES_TEMPLATE = """
         </div>
         <div class="form-row">
           <div class="form-field">
-            <label>Address Line 1</label>
-            <input class="form-control" type="text" name="address_line1">
-          </div>
-          <div class="form-field">
-            <label>Address Line 2</label>
-            <input class="form-control" type="text" name="address_line2">
+            <label>Address Line</label>
+            <input class="form-control" type="text" name="address_line">
           </div>
         </div>
         <div class="form-row">
@@ -2051,7 +2229,7 @@ SITE_DETAIL_TEMPLATE = """
     <div class="card">
       <h2><span class="icon">📍</span>Address</h2>
       <p class="muted">
-        {{ site.address_line1 or '' }} {{ site.address_line2 or '' }}<br>
+        {{ site.address_line1 or '' }}<br>
         {{ site.city or '' }} {{ site.state or '' }} {{ site.postal_code or '' }}<br>
         {{ site.country or '' }}
       </p>
@@ -2471,6 +2649,12 @@ LABKIT_DETAIL_TEMPLATE = """
         <div><p class="eyebrow">Created</p><p>{{ labkit.created_at }}</p></div>
         <div><p class="eyebrow">Updated</p><p>{{ labkit.updated_at }}</p></div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">📄</span>Requisition Form</h2>
+      <p class="muted">Download the pre-filled requisition PDF for this kit.</p>
+      <a class="btn btn-secondary" href="{{ url_for('labkit_requisition', labkit_id=labkit.id) }}"><span class="icon">📄</span>Download requisition PDF</a>
     </div>
 
     <div class="card">
