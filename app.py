@@ -2170,7 +2170,10 @@ SITES_TEMPLATE = """
                 <input type="hidden" name="id" value="{{ s.id }}">
                 <input class="form-control" type="text" name="site_code" value="{{ s.site_code }}" required>
                 <input class="form-control" type="text" name="site_name" value="{{ s.site_name }}" required>
+                <input class="form-control" type="text" name="address_line" value="{{ s.address_line1 or '' }}" placeholder="Address line">
                 <input class="form-control" type="text" name="city" value="{{ s.city or '' }}" placeholder="City">
+                <input class="form-control" type="text" name="state" value="{{ s.state or '' }}" placeholder="State">
+                <input class="form-control" type="text" name="postal_code" value="{{ s.postal_code or '' }}" placeholder="Postal code">
                 <input class="form-control" type="text" name="country" value="{{ s.country or '' }}" placeholder="Country">
                 <button type="submit" class="btn btn-secondary"><span class="icon">✏️</span>Update</button>
               </form>
