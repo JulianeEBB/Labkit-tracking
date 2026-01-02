@@ -15,13 +15,22 @@ def _rows_to_dicts(cursor) -> List[Dict[str, Any]]:
     return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
+def _normalize_prefix(prefix: str) -> str:
+    """Apply prefix rules (e.g., replace disallowed leading letters)."""
+    if not prefix:
+        return prefix
+    if prefix.startswith("C"):
+        return f"Y{prefix[1:]}"
+    return prefix
+
+
 def _derive_prefix(name: str) -> str:
     """Return a short uppercase prefix derived from a labkit type name."""
     if not name:
         return "KIT"
     tokens = [t for t in re.split(r"[^A-Za-z0-9]+", name) if t]
     candidate = "".join(t[0] for t in tokens) or name[:4]
-    return candidate.upper()[:6]  # keep compact for labels
+    return _normalize_prefix(candidate.upper()[:6])  # keep compact for labels
 
 
 def _ensure_labkit_type_prefix(cur, labkit_type_id: int) -> str:
@@ -32,7 +41,13 @@ def _ensure_labkit_type_prefix(cur, labkit_type_id: int) -> str:
         raise ValueError(f"Labkit type {labkit_type_id} not found")
     name, existing_prefix = row
     if existing_prefix:
-        return existing_prefix
+        normalized = _normalize_prefix(existing_prefix)
+        if normalized != existing_prefix:
+            cur.execute(
+                "UPDATE labkit_type SET prefix = %s WHERE id = %s;",
+                (normalized, labkit_type_id),
+            )
+        return normalized
     generated = _derive_prefix(name)
     cur.execute("UPDATE labkit_type SET prefix = %s WHERE id = %s;", (generated, labkit_type_id))
     return generated
@@ -61,7 +76,7 @@ def backfill_missing_barcodes() -> None:
         cur.execute("SELECT id, name, prefix FROM labkit_type ORDER BY id;")
         kit_types = cur.fetchall()
         for labkit_type_id, name, prefix in kit_types:
-            prefix_value = prefix or _derive_prefix(name)
+            prefix_value = _normalize_prefix(prefix) if prefix else _derive_prefix(name)
             dirty = False
             if prefix != prefix_value:
                 cur.execute(
