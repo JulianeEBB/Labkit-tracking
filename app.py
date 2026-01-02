@@ -360,14 +360,40 @@ def expiry_page():
 def labkits_page():
     message = request.args.get("message", "")
     error = request.args.get("error", "")
+    kit_type_filter_raw = request.args.get("kit_type_id", "").strip()
+    site_filter_raw = request.args.get("site_id", "").strip()
+    status_filter = request.args.get("status", "").strip()
+    labkits = list_labkits()
+    if kit_type_filter_raw:
+        try:
+            kit_type_filter = int(kit_type_filter_raw)
+        except ValueError:
+            kit_type_filter = None
+        if kit_type_filter:
+            labkits = [k for k in labkits if k.get("labkit_type_id") == kit_type_filter]
+    if site_filter_raw:
+        if site_filter_raw == "none":
+            labkits = [k for k in labkits if not k.get("site_id")]
+        else:
+            try:
+                site_filter = int(site_filter_raw)
+            except ValueError:
+                site_filter = None
+            if site_filter:
+                labkits = [k for k in labkits if k.get("site_id") == site_filter]
+    if status_filter:
+        labkits = [k for k in labkits if (k.get("status") or "") == status_filter]
     return render_template_string(
         LABKITS_TEMPLATE,
         nav_active="labkits",
         message=message,
         error=error,
-        labkits=list_labkits(),
+        labkits=labkits,
         labkit_types=list_labkit_types(),
         sites=list_sites(),
+        kit_type_id=kit_type_filter_raw,
+        site_id=site_filter_raw,
+        status=status_filter,
         status_options=[
             "planned",
             "packed",
@@ -1891,6 +1917,43 @@ LABKITS_TEMPLATE = """
           </div>
         </div>
         <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Labkit</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">🔍</span>Filter</h2>
+      <form method="get" action="{{ url_for('labkits_page') }}" class="stacked">
+        <div class="form-row">
+          <div class="form-field">
+            <label>Kit Type</label>
+            <select class="form-control" name="kit_type_id">
+              <option value="">All</option>
+              {% for t in labkit_types %}
+              <option value="{{ t.id }}" {% if kit_type_id|default('') == t.id|string %}selected{% endif %}>{{ t.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Site</label>
+            <select class="form-control" name="site_id">
+              <option value="">All</option>
+              <option value="none" {% if site_id == 'none' %}selected{% endif %}>Central depot</option>
+              {% for s in sites %}
+              <option value="{{ s.id }}" {% if site_id|default('') == s.id|string %}selected{% endif %}>{{ s.site_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Status</label>
+            <select class="form-control" name="status">
+              <option value="">All</option>
+              {% for st in status_options %}
+              <option value="{{ st }}" {% if st == status %}selected{% endif %}>{{ st }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Filter</button>
       </form>
     </div>
 
