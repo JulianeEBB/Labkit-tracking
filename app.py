@@ -120,6 +120,22 @@ def parse_datetime(dt_str: str):
         return None
 
 
+@app.template_filter("format_ts")
+def format_timestamp(value):
+    """Format datetime values without fractional seconds for display."""
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed:
+            return parsed.isoformat(sep=" ", timespec="seconds")
+    return str(value)
+
+
 def parse_optional_float(raw_value: str, field_label: str):
     """Parse a float if provided; return (value, error_message)."""
     if raw_value is None:
@@ -182,7 +198,7 @@ def index():
         nav_active="home",
         sites=list_sites(),
         labkit_types=list_labkit_types(),
-        labkits=all_kits,
+        labkits=all_kits[:10],
         history_barcode=history_barcode,
         history=history,
         expiring_count=len(expiring_soon),
@@ -1221,7 +1237,7 @@ def export_labkits():
             r.get("status") or "",
             r.get("lot_number") or "",
             str(r.get("expiry_date") or ""),
-            str(r.get("created_at") or ""),
+            format_timestamp(r.get("created_at") or ""),
         ]
         # naive CSV escaping for commas/quotes
         escaped = []
@@ -1256,7 +1272,7 @@ def export_shipments():
         values = [
             str(r.get("id") or ""),
             r.get("site_name") or "",
-            str(r.get("shipped_at") or ""),
+            format_timestamp(r.get("shipped_at") or ""),
             r.get("carrier") or "",
             r.get("tracking_number") or "",
             r.get("status") or "",
@@ -1280,7 +1296,12 @@ def export_shipments():
 @app.route("/history", methods=["POST"])
 def handle_history():
     barcode = request.form.get("history_barcode", "").strip()
-    return redirect(url_for("index", history_barcode=barcode))
+    if not barcode:
+        return redirect(url_for("index", error="Barcode is required"))
+    labkit = get_labkit_by_barcode(barcode)
+    if not labkit:
+        return redirect(url_for("index", error="Labkit not found"))
+    return redirect(url_for("labkit_detail_page", labkit_id=labkit["id"]))
 
 
 def _fetch_audit_rows(from_date_val, to_date_val, entity_type_filter):
@@ -1324,7 +1345,7 @@ def export_audit():
     for r in rows:
         writer.writerow(
             [
-                r.timestamp,
+                format_timestamp(r.timestamp),
                 r.user or "",
                 r.entity_type,
                 r.entity_id,
@@ -1379,7 +1400,7 @@ def export_audit_pdf():
     for r in rows:
         line = " | ".join(
             [
-                str(r.timestamp),
+                format_timestamp(r.timestamp),
                 r.user or "",
                 r.entity_type,
                 str(r.entity_id),
@@ -1430,7 +1451,7 @@ def export_audit_bundle():
     for r in rows:
         csv_writer.writerow(
             [
-                r.timestamp,
+                format_timestamp(r.timestamp),
                 r.user or "",
                 r.entity_type,
                 r.entity_id,
@@ -1467,7 +1488,7 @@ def export_audit_bundle():
     for r in rows:
         line = " | ".join(
             [
-                str(r.timestamp),
+                format_timestamp(r.timestamp),
                 r.user or "",
                 r.entity_type,
                 str(r.entity_id),
@@ -1603,7 +1624,7 @@ TEMPLATE = """
           <tbody>
           {% for s in sites %}
           <tr>
-            <td>{{ s.id }}</td><td>{{ s.site_code }}</td><td>{{ s.site_name }}</td><td>{{ s.created_at }}</td>
+            <td>{{ s.id }}</td><td>{{ s.site_code }}</td><td>{{ s.site_name }}</td><td>{{ s.created_at|format_ts }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -1626,7 +1647,7 @@ TEMPLATE = """
           <tbody>
           {% for t in labkit_types %}
           <tr>
-            <td>{{ t.id }}</td><td>{{ t.name }}</td><td>{{ t.description }}</td><td>{{ t.default_expiry_days }}</td><td>{{ t.created_at }}</td>
+            <td>{{ t.id }}</td><td>{{ t.name }}</td><td>{{ t.description }}</td><td>{{ t.default_expiry_days }}</td><td>{{ t.created_at|format_ts }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -1654,7 +1675,7 @@ TEMPLATE = """
           <tr>
             <td>{{ k.id }}</td><td>{{ k.barcode_value or k.kit_barcode }}</td><td>{{ k.labkit_type_id }}</td>
             <td>{{ k.site_id }}</td><td>{{ k.lot_number }}</td><td>{{ k.expiry_date }}</td>
-            <td><span class="badge status-{{ k.status|replace(' ', '_') }}">{{ k.status }}</span></td><td>{{ k.created_at }}</td><td>{{ k.updated_at }}</td>
+            <td><span class="badge status-{{ k.status|replace(' ', '_') }}">{{ k.status }}</span></td><td>{{ k.created_at|format_ts }}</td><td>{{ k.updated_at|format_ts }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -1688,7 +1709,7 @@ TEMPLATE = """
             <tbody>
             {% for ev in history %}
             <tr>
-              <td>{{ ev.old_status }}</td><td>{{ ev.new_status }}</td><td>{{ ev.event_time }}</td>
+              <td>{{ ev.old_status }}</td><td>{{ ev.new_status }}</td><td>{{ ev.event_time|format_ts }}</td>
             </tr>
             {% endfor %}
             </tbody>
@@ -1796,7 +1817,7 @@ KIT_TYPES_TEMPLATE = """
             <td>{{ t.default_expiry_days }}</td>
             <td>{{ t.standard_weight }}</td>
             <td>{{ t.weight_variance }}</td>
-            <td>{{ t.created_at }}</td>
+            <td>{{ t.created_at|format_ts }}</td>
             <td class="actions">
               <form method="post" action="{{ url_for('handle_update_kit_type') }}" class="inline-form">
                 <input type="hidden" name="id" value="{{ t.id }}">
@@ -2494,7 +2515,7 @@ SHIPMENTS_TEMPLATE = """
           <tr>
             <td>{{ sh.id }}</td>
             <td>{{ sh.site_name }}</td>
-            <td>{{ sh.shipped_at }}</td>
+            <td>{{ sh.shipped_at|format_ts }}</td>
             <td>{{ sh.expected_arrival }}</td>
             <td>{{ sh.carrier }}</td>
             <td>{{ sh.tracking_number }}</td>
@@ -2714,8 +2735,8 @@ LABKIT_DETAIL_TEMPLATE = """
         <div><p class="eyebrow">Measured Weight</p><p>{{ labkit.measured_weight if labkit.measured_weight is not none else '—' }} g</p></div>
         <div><p class="eyebrow">Expiry</p><p>{{ labkit.expiry_date }}</p></div>
         <div><p class="eyebrow">Status</p><p><span class="badge status-{{ labkit.status|replace(' ', '_') }}">{{ labkit.status }}</span></p></div>
-        <div><p class="eyebrow">Created</p><p>{{ labkit.created_at }}</p></div>
-        <div><p class="eyebrow">Updated</p><p>{{ labkit.updated_at }}</p></div>
+        <div><p class="eyebrow">Created</p><p>{{ labkit.created_at|format_ts }}</p></div>
+        <div><p class="eyebrow">Updated</p><p>{{ labkit.updated_at|format_ts }}</p></div>
       </div>
     </div>
 
@@ -2738,7 +2759,7 @@ LABKIT_DETAIL_TEMPLATE = """
           <tbody>
           {% for ev in events %}
           <tr>
-            <td>{{ ev.created_at }}</td>
+            <td>{{ ev.created_at|format_ts }}</td>
             <td>{{ ev.event_type }}</td>
             <td>{{ ev.description }}</td>
             <td>{{ ev.created_by }}</td>
@@ -2762,7 +2783,7 @@ LABKIT_DETAIL_TEMPLATE = """
           <tbody>
           {% for a in audit_entries %}
           <tr>
-            <td>{{ a.timestamp }}</td>
+            <td>{{ a.timestamp|format_ts }}</td>
             <td>{{ a.user }}</td>
             <td>{{ a.action }}</td>
             <td>{{ a.field_name }}</td>
