@@ -958,12 +958,29 @@ def labkit_requisition(labkit_id: int):
 
     output = io.BytesIO()
     writer.write(output)
-    output.seek(0)
-    filename = f"requisition-{barcode_value or labkit_id}.pdf"
+    pdf_bytes = output.getvalue()
+    filename_base = f"requisition-{barcode_value or labkit_id}"
+    if len(writer.pages) <= 1:
+        return Response(
+            pdf_bytes,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename_base}.pdf"},
+        )
+
+    filled_reader = PdfReader(io.BytesIO(pdf_bytes))
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for page_idx, page in enumerate(filled_reader.pages, start=1):
+            page_writer = PdfWriter()
+            page_writer.add_page(page)
+            page_buffer = io.BytesIO()
+            page_writer.write(page_buffer)
+            zf.writestr(f"{filename_base}-page-{page_idx}.pdf", page_buffer.getvalue())
+    zip_buffer.seek(0)
     return Response(
-        output.getvalue(),
-        mimetype="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        zip_buffer.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename_base}.zip"},
     )
 
 
