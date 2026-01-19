@@ -76,6 +76,11 @@ def current_username() -> str:
     return session.get("username") or "system"
 
 
+def is_admin() -> bool:
+    """Return True when the current user has an admin role."""
+    return (session.get("role") or "").lower() == "admin"
+
+
 def login_required(view_func):
     """Simple decorator to require login for a route."""
 
@@ -420,6 +425,7 @@ def labkits_page():
             "returned",
             "destroyed",
         ],
+        is_admin=is_admin(),
         current_user=session.get("username"),
     )
 
@@ -1010,37 +1016,52 @@ def handle_add_labkit():
     )
     expiry_date_str = request.form.get("expiry_date", "").strip()
     status = request.form.get("status", "").strip() or "planned"
+    create_count_raw = request.form.get("create_count", "1").strip()
     if weight_error:
         return redirect(url_for("labkits_page", error=weight_error))
     expiry = parse_date(expiry_date_str)
     if not labkit_type_id_raw:
         return redirect(url_for("labkits_page", error="Labkit type is required"))
-    new_id = add_labkit(
-        labkit_type_id=int(labkit_type_id_raw),
-        site_id=int(site_id) if site_id else None,
-        lot_number=lot_number,
-        measured_weight=measured_weight,
-        expiry_date=expiry,
-        created_by=current_username(),
-    )
-    created = get_labkit_by_id(new_id) or {}
-    display_code = created.get("barcode_value") or created.get("kit_barcode")
+    try:
+        create_count = int(create_count_raw or "1")
+    except ValueError:
+        return redirect(url_for("labkits_page", error="Quantity must be a number"))
+    if create_count < 1 or create_count > 10:
+        return redirect(url_for("labkits_page", error="Quantity must be between 1 and 10"))
+    if not is_admin() and create_count != 1:
+        return redirect(url_for("labkits_page", error="Only admins can create multiple labkits at once"))
+    created_codes = []
     db_session = SessionLocal()
     try:
-        log_audit_event(
-            db_session,
-            entity_type="Labkit",
-            entity_id=new_id,
-            action="CREATE",
-            description=f"Labkit {display_code} created",
-        )
+        for _ in range(create_count):
+            new_id = add_labkit(
+                labkit_type_id=int(labkit_type_id_raw),
+                site_id=int(site_id) if site_id else None,
+                lot_number=lot_number,
+                measured_weight=measured_weight,
+                expiry_date=expiry,
+                created_by=current_username(),
+            )
+            created = get_labkit_by_id(new_id) or {}
+            display_code = created.get("barcode_value") or created.get("kit_barcode")
+            created_codes.append(display_code)
+            log_audit_event(
+                db_session,
+                entity_type="Labkit",
+                entity_id=new_id,
+                action="CREATE",
+                description=f"Labkit {display_code} created",
+            )
+            if status and status != "planned":
+                update_labkit_status(display_code or "", status, created_by=current_username())
         db_session.commit()
     finally:
         db_session.close()
-    # Update status if different than default
-    if status and status != "planned":
-        update_labkit_status(display_code or "", status, created_by=current_username())
-    return redirect(url_for("labkits_page", message=f"Labkit '{display_code}' added."))
+    if create_count == 1:
+        message = f"Labkit '{created_codes[0]}' added."
+    else:
+        message = f"{create_count} labkits created ({created_codes[0]}-{created_codes[-1]})."
+    return redirect(url_for("labkits_page", message=message))
 
 
 @app.route("/labkits/update", methods=["POST"])
@@ -1953,6 +1974,16 @@ LABKITS_TEMPLATE = """
               {% endfor %}
             </select>
           </div>
+          {% if is_admin %}
+          <div class="form-field">
+            <label>Quantity</label>
+            <select class="form-control" name="create_count">
+              {% for n in range(1, 11) %}
+              <option value="{{ n }}">{{ n }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
         </div>
         <button type="submit" class="btn btn-primary"><span class="icon">➕</span>Save Labkit</button>
       </form>

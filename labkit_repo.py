@@ -19,15 +19,36 @@ def _normalize_prefix(prefix: str) -> str:
     """Apply prefix rules (e.g., replace disallowed leading letters)."""
     if not prefix:
         return prefix
-    if prefix.startswith("C"):
+    if len(prefix) > 1 and prefix.startswith("C"):
         return f"Y{prefix[1:]}"
     return prefix
+
+
+def _normalize_labkit_type_key(name: str) -> str:
+    """Normalize labkit type names for stable prefix mapping."""
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def _mapped_prefix_for_name(name: str) -> Optional[str]:
+    """Return a forced prefix for known labkit types."""
+    mapped_prefixes = {
+        "c1d1": "A",
+        "c1d8": "B",
+        "c1d22c2d1": "C",
+        "cxd22cyd1": "D",
+        "screening": "E",
+        "unscheduled": "F",
+    }
+    return mapped_prefixes.get(_normalize_labkit_type_key(name))
 
 
 def _derive_prefix(name: str) -> str:
     """Return a short uppercase prefix derived from a labkit type name."""
     if not name:
         return "KIT"
+    mapped = _mapped_prefix_for_name(name)
+    if mapped:
+        return mapped
     tokens = [t for t in re.split(r"[^A-Za-z0-9]+", name) if t]
     candidate = "".join(t[0] for t in tokens) or name[:4]
     return _normalize_prefix(candidate.upper()[:6])  # keep compact for labels
@@ -40,6 +61,14 @@ def _ensure_labkit_type_prefix(cur, labkit_type_id: int) -> str:
     if not row:
         raise ValueError(f"Labkit type {labkit_type_id} not found")
     name, existing_prefix = row
+    forced_prefix = _mapped_prefix_for_name(name)
+    if forced_prefix:
+        if existing_prefix != forced_prefix:
+            cur.execute(
+                "UPDATE labkit_type SET prefix = %s WHERE id = %s;",
+                (forced_prefix, labkit_type_id),
+            )
+        return forced_prefix
     if existing_prefix:
         normalized = _normalize_prefix(existing_prefix)
         if normalized != existing_prefix:
@@ -76,7 +105,8 @@ def backfill_missing_barcodes() -> None:
         cur.execute("SELECT id, name, prefix FROM labkit_type ORDER BY id;")
         kit_types = cur.fetchall()
         for labkit_type_id, name, prefix in kit_types:
-            prefix_value = _normalize_prefix(prefix) if prefix else _derive_prefix(name)
+            forced_prefix = _mapped_prefix_for_name(name)
+            prefix_value = forced_prefix or (_normalize_prefix(prefix) if prefix else _derive_prefix(name))
             dirty = False
             if prefix != prefix_value:
                 cur.execute(
