@@ -29,14 +29,33 @@ def _normalize_labkit_type_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
+def _format_site_code_segment(site_code: Optional[str]) -> str:
+    """Return a 4-digit site code segment for barcodes."""
+    digits = re.sub(r"\D", "", site_code or "")
+    if digits:
+        return digits.zfill(4)[-4:]
+    return "0000"
+
+
+def _site_code_segment(cur, site_id: Optional[int]) -> str:
+    """Fetch and normalize the site code segment for barcode generation."""
+    if not site_id:
+        return "0000"
+    cur.execute("SELECT site_code FROM site WHERE id = %s;", (site_id,))
+    row = cur.fetchone()
+    if not row:
+        return "0000"
+    return _format_site_code_segment(row[0])
+
+
 def _mapped_prefix_for_name(name: str) -> Optional[str]:
     """Return a forced prefix for known labkit types."""
     mapped_prefixes = {
-        "c1d1": "A",
-        "c1d8": "B",
-        "c1d22c2d1": "C",
-        "cxd22cyd1": "D",
-        "screening": "E",
+        "screening": "A",
+        "c1d1": "B",
+        "c1d8": "C",
+        "c1d22c2d1": "D",
+        "cxd22cyd1": "E",
         "unscheduled": "F",
     }
     return mapped_prefixes.get(_normalize_labkit_type_key(name))
@@ -82,16 +101,16 @@ def _ensure_labkit_type_prefix(cur, labkit_type_id: int) -> str:
     return generated
 
 
-def _next_sequence_for_type(cur, labkit_type_id: int, prefix: str) -> int:
-    """Return the next numeric suffix for a labkit type based on existing barcodes."""
+def _next_sequence_for_type(cur, labkit_type_id: int, prefix: str, site_segment: str) -> int:
+    """Return the next numeric suffix for a labkit type/site based on existing barcodes."""
     cur.execute(
         """
-        SELECT COALESCE(MAX(CAST(split_part(barcode_value, '-', 2) AS INTEGER)), 0)
+        SELECT COALESCE(MAX(CAST(split_part(barcode_value, '-', 3) AS INTEGER)), 0)
         FROM labkit
         WHERE labkit_type_id = %s
           AND barcode_value LIKE %s;
         """,
-        (labkit_type_id, f"{prefix}-%"),
+        (labkit_type_id, f"{prefix}-{site_segment}-%"),
     )
     current_max = cur.fetchone()[0] or 0
     return int(current_max) + 1
@@ -117,7 +136,7 @@ def backfill_missing_barcodes() -> None:
             # Lock rows we will update to keep numbering stable
             cur.execute(
                 """
-                SELECT id
+                SELECT id, site_id
                 FROM labkit
                 WHERE labkit_type_id = %s AND barcode_value IS NULL
                 ORDER BY id
@@ -125,12 +144,18 @@ def backfill_missing_barcodes() -> None:
                 """,
                 (labkit_type_id,),
             )
-            missing = [row[0] for row in cur.fetchall()]
+            missing = cur.fetchall()
             if missing:
-                next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix_value)
-                for labkit_id in missing:
-                    candidate = f"{prefix_value}-{next_seq:04d}"
-                    next_seq += 1
+                next_by_site = {}
+                for labkit_id, site_id in missing:
+                    site_segment = _site_code_segment(cur, site_id)
+                    next_seq = next_by_site.get(site_segment)
+                    if next_seq is None:
+                        next_seq = _next_sequence_for_type(
+                            cur, labkit_type_id, prefix_value, site_segment
+                        )
+                    candidate = f"{prefix_value}-{site_segment}-{next_seq:04d}"
+                    next_by_site[site_segment] = next_seq + 1
                     cur.execute(
                         "UPDATE labkit SET barcode_value = %s WHERE id = %s;",
                         (candidate, labkit_id),
@@ -479,11 +504,12 @@ def add_labkit(
     cur = conn.cursor()
     try:
         prefix = _ensure_labkit_type_prefix(cur, labkit_type_id)
-        next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix)
+        site_segment = _site_code_segment(cur, site_id)
+        next_seq = _next_sequence_for_type(cur, labkit_type_id, prefix, site_segment)
         attempts = 0
         # Allow more retries and bump the suffix each time to escape collisions.
         while attempts < 50:
-            barcode_value = f"{prefix}-{next_seq:04d}"
+            barcode_value = f"{prefix}-{site_segment}-{next_seq:04d}"
             candidate_barcode = kit_barcode or barcode_value
             try:
                 cur.execute(
