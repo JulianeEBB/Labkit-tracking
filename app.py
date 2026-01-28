@@ -2091,7 +2091,7 @@ LABKITS_TEMPLATE = """
               </form>
               <a class="btn btn-link" href="{{ url_for('labkit_detail_page', labkit_id=k.id) }}"><span class="icon">📄</span>Details</a>
               <a class="btn btn-link" href="{{ url_for('labkit_requisition', labkit_id=k.id) }}"><span class="icon">📄</span>Requisition</a>
-              <a class="btn btn-link" href="{{ url_for('labkit_label', labkit_id=k.id) }}" target="_blank"><span class="icon">🖨️</span>Print label</a>
+              <a class="btn btn-link" href="{{ url_for('labkit_label_csv', labkit_id=k.id) }}"><span class="icon">🖨️</span>Label</a>
             </td>
           </tr>
           {% endfor %}
